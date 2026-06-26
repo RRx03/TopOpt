@@ -1,0 +1,14 @@
+.DS_Store
+build/
+output/
+*.o
+*.d
+*.dSYM
+__pycache__/
+.venv/
+*.pyc
+xcuserdata/
+DerivedData/
+
+# Vendored deps are kept, but ignore any stray clone artifacts
+third_party/eigen_tmp/

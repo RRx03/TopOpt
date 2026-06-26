@@ -1,0 +1,13 @@
+{
+  "name": "mbb",
+  "nelx": 200,
+  "nely": 100,
+  "volfrac": 0.5,
+  "penal": 3.0,
+  "filter_radius": 2.0,
+  "move": 0.2,
+  "max_iter": 100,
+  "E0": 1.0,
+  "Emin": 1e-9,
+  "nu": 0.3
+}
