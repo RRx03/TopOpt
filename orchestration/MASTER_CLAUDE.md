@@ -160,7 +160,8 @@ Pour toute demande de code ou d'algorithme :
 ### Démarrage de session
 1. Lire `orchestration/MASTER_CLAUDE.md` (ce fichier).
 2. Lire `orchestration/LESSONS_LEARNED.md` (pièges connus).
-3. Lire le handoff de la phase précédente : `orchestration/handoffs/PHASE_(N-1)_TO_N.md`.
+3. Lire le handoff de la phase précédente : `orchestration/handoffs/PHASE_{N-1}_TO_{N}.md`
+   (ex. Phase 3 → `PHASE_2_TO_3.md`).
 4. Lire le brief de la phase courante : `orchestration/prompts/PHASE_N_BRIEF.md`.
 5. Lire le `CLAUDE.md` de la phase courante (overrides spécifiques).
 
@@ -175,7 +176,7 @@ Pour toute demande de code ou d'algorithme :
 1. Mettre à jour `LESSONS_LEARNED.md` avec les pièges rencontrés (sinon le dire
    explicitement : "aucune nouvelle entrée").
 2. Si **fin de phase** : produire `TopOptPN/PHASE_N_REPORT.md` et
-   `orchestration/handoffs/PHASE_N_TO_(N+1).md` (cf. `prompts/CLOSE_PHASE_N.md`).
+   `orchestration/handoffs/PHASE_{N}_TO_{N+1}.md` (cf. `prompts/CLOSE_PHASE_N.md`).
 3. Proposer un commit Git au message explicite (Conventional Commits). **Ne jamais
    committer sans validation de l'utilisateur.**
 
