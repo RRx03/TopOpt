@@ -1,4 +1,4 @@
-# TopOpt Phase 2 — 3D + Metal GPU compute
+# TopOpt Phase 3 — multi-grid + mesh independence (on the Phase 2 matrix-free base)
 # clang++ / C++23 / metal-cpp (macOS Apple Silicon)
 
 CXX      := clang++
@@ -19,7 +19,7 @@ SHADERS := shaders
 
 # CPU FEM core (Eigen only, no Metal).
 CPU_SRCS := $(SRC)/fem/H8Element.cpp $(SRC)/fem/FEM3D.cpp \
-            $(SRC)/topopt/SIMP3D.cpp
+            $(SRC)/topopt/SIMP3D.cpp $(SRC)/topopt/GridTransfer.cpp
 # Metal context core (device/queue/library + single metal-cpp impl TU).
 GPU_CORE_SRCS := $(SRC)/gpu/MetalContext.cpp $(SRC)/gpu/metal_impl.cpp
 # GPU solvers (matrix-free CG + Helmholtz filter), depend on CPU FEM core.
@@ -43,10 +43,11 @@ TEST_HELLO := $(BUILD)/test_metal_hello
 TEST_FEM   := $(BUILD)/test_fem3d
 TEST_CG    := $(BUILD)/test_cg_gpu
 TEST_MBB   := $(BUILD)/test_mbb3d
+TEST_MG    := $(BUILD)/test_multigrid
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
-all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TOPOPT) $(METALLIB)
+all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TOPOPT) $(METALLIB)
 
 # --- link rules ---
 $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
@@ -64,16 +65,21 @@ $(TEST_MBB): $(CPU_OBJS) $(GPU_OBJS) $(IO_OBJS) $(OBJ)/test_mbb3d.o
 $(TOPOPT): $(CPU_OBJS) $(GPU_OBJS) $(IO_OBJS) $(OBJ)/main.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
+$(TEST_MG): $(CPU_OBJS) $(OBJ)/test_multigrid.o
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
 # Full GPU test suite (needs the metallib).
 test: all
 	./$(TEST_FEM)
+	./$(TEST_MG)
 	./$(TEST_CG)
 	./$(TEST_HELLO)
 	./$(TEST_MBB)
 
 # CPU-only checks (no GPU / no metallib needed).
-test_cpu: $(TEST_FEM)
+test_cpu: $(TEST_FEM) $(TEST_MG)
 	./$(TEST_FEM)
+	./$(TEST_MG)
 
 run: $(TOPOPT) $(METALLIB)
 	./$(TOPOPT) mbb
@@ -96,5 +102,5 @@ $(METALLIB): $(METAL_AIR)
 	xcrun -sdk macosx metallib $^ -o $@
 
 clean:
-	rm -rf $(OBJ) $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TOPOPT) \
-	       $(METAL_AIR) $(METALLIB)
+	rm -rf $(OBJ) $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) \
+	       $(TOPOPT) $(METAL_AIR) $(METALLIB)

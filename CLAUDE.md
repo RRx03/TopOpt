@@ -1,37 +1,35 @@
-# CLAUDE.md — TopOpt Phase 2 (overrides)
+# CLAUDE.md — TopOpt Phase 3 (overrides)
 
-> **Autorité : `../orchestration/MASTER_CLAUDE.md`.** Ce fichier ne contient que
-> les spécificités Phase 2. Version originale archivée :
-> `../analysis/_legacy/TopOptP2/CLAUDE.original.md`.
+> **Autorité : `../orchestration/MASTER_CLAUDE.md`.** Spécificités Phase 3
+> uniquement. Brief : `../orchestration/prompts/PHASE_3_BRIEF.md`. Handoff :
+> `../orchestration/handoffs/PHASE_2_TO_3.md`.
 
 ## Statut
-**Phase 2 substantiellement complète (clôturée 2026-06-26).** Solveur TO 3D
-**matrix-free** sur GPU Metal, validé (patch test, cantilever, CG vs CPU, MBB 3D),
-`make` 0 warning, `make test` vert. Réserve : opti 128³ complète = 16.6 min (cible
-< 10 min non tenue avec Jacobi → corrigé par le multigrid Phase 3). Rapport :
-`PHASE_2_REPORT.md`. Handoff : `../orchestration/handoffs/PHASE_2_TO_3.md`.
+**Phase 3 en cours — session 1 faite.** Base = solveur matrix-free Phase 2 (copié).
+Objectif : multi-grid uniforme + mesh independence + filtre rayon physique (mm).
 
-## Spécificités Phase 2 (font foi — cf. `PHASE_2_REPORT.md`)
-- C++23 + **metal-cpp non-ARC** (ref counting manuel, `*_PRIVATE_IMPLEMENTATION`
-  dans `src/gpu/metal_impl.cpp`, forward decls MTL:: dans les headers).
-- Build **two-phase** : `.metal → build/shaders.metallib`, puis C++ + link.
-  Makefile partitionné CPU / GPU_CORE / GPU_SOLVER / IO.
-- **Matrix-free** : K jamais assemblée ; K·u par node-gather (kernel `mf_matvec_elastic`).
-  CG Jacobi (`CGSolver3D`). Filtre Helmholtz matrix-free scalaire (`Helmholtz3D`).
-- **Emin = 1e-4** (pas 1e-9) : requis par le CG itératif float32 (LL-006).
-- `newLibrary("build/shaders.metallib")`, `StorageModeShared`. Deps via symlinks
-  `third_party/{metal-cpp,eigen,nlohmann}` → `../shared/third_party`.
-- ADR-001..008 : `docs/DECISIONS.md`.
-- Commands : `make`, `make test`, `make run` (mbb 60³), `./build/topopt bench 128`.
+Session 1 livrée : `Grid3DMultiLevel` (hiérarchie ×2), `GridTransfer`
+(prolongation/restriction densité, **conservatives**), `HelmholtzFilterPhysical`
+(rayon mm). Tests : round-trip 2.2e-16, conservation volume exacte. 0 warning.
+
+## Spécificités Phase 3
+- Hérite de tout Phase 2 (matrix-free CG/Jacobi, Helmholtz3D, SIMP3D, STL).
+- **Nouveau** : hiérarchie de grilles 32³→…→256³ (facteur 2), warm-start,
+  filtre Helmholtz **rayon en mm** (mesh-independent, LL-LIT-006).
+- **Priorité perf** : préconditionneur **multigrid V-cycle** (faire tomber le coût
+  CG : 1516→4001 iter à 128³ en fin d'opti). Viser opti 128³ < 10 min.
+- Conservation de volume inter-niveaux obligatoire (LL-LIT-010) — déjà testée.
+- Décision à acter : continuation de p entre niveaux → `docs/DECISIONS.md`.
 
 ## Commands
-- Build : `make` · Test : `make test` (vec_add GPU vs CPU) · Run : `make run` · Clean : `make clean`
+- Build : `make` · Tests : `make test` (+ `make test_cpu` pour multigrid/fem sans GPU)
+- Run : `make run` · Clean : `make clean`
 
 ## Read first
 1. `../orchestration/MASTER_CLAUDE.md`
-2. Ce fichier · `STATUS.md` · `PHASE_2_REPORT.md`
-3. `../orchestration/handoffs/PHASE_1_TO_2.md`
+2. Ce fichier · `STATUS.md`
+3. `../orchestration/handoffs/PHASE_2_TO_3.md` · `../orchestration/prompts/PHASE_3_BRIEF.md`
 
 ## Read on demand
-- `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/SYMBOLS.md`
-- `../analysis/CODE_ANALYSIS.md` — faits sur le code réel
+- `../TopOptP2/PHASE_2_REPORT.md` — base matrix-free
+- `docs/DECISIONS.md`, `docs/SYMBOLS.md`
