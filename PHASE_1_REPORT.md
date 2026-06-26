@@ -121,15 +121,19 @@ Hardware : Mac Studio M4 Max, 64 GB unified memory.
 
 ## 8. Mise à jour LESSONS_LEARNED.md proposée
 
+> **Statut (2026-06-26)** : intégrées dans `orchestration/LESSONS_LEARNED.md`,
+> **renumérotées LL-004 et LL-005** (les numéros LL-002/LL-003 étaient déjà pris
+> par d'autres entrées au moment du reset documentaire).
+
 ```markdown
-### LL-002 : Compliance non invariante au maillage (Phase 1, 2026-06-15)
+### LL-004 : Compliance non invariante au maillage (Phase 1, 2026-06-15)
 - Symptôme : valeur de compliance de référence d'un papier appliquée à une autre résolution.
 - Cause : domaine défini en unités-élément → grandit avec le maillage ; c ~ L³/H³.
 - Conséquence : faux "échec" de validation, ou faux succès.
 - Leçon : une compliance de référence n'est valable QU'À la résolution/géométrie du papier.
 - Vérification : reproduire le cas canonique sur SA grille avant de comparer.
 
-### LL-003 : Build clang — deps tierces et collisions de noms (Phase 1, 2026-06-15)
+### LL-005 : Build clang — deps tierces et collisions de noms (Phase 1, 2026-06-15)
 - Symptôme : warnings Eigen sous -Wpedantic ; binaire et dossier d'objets homonymes.
 - Cause : -I au lieu de -isystem ; binaire build/X et objets build/X/.
 - Conséquence : "0 warning" impossible ; erreur de link EISDIR.

@@ -1,3 +1,14 @@
+> **⚠️ Référence historique (depuis le reset documentaire du 2026-06-26).**
+> Ce document reste la cartographie détaillée d'origine des phases, mais il est
+> **superseded opérationnellement** par l'orchestration unifiée :
+> - Vue d'ensemble : `../orchestration/ROADMAP.md`
+> - Détail par phase : `../orchestration/prompts/PHASE_N_BRIEF.md`
+> - Passations : `../orchestration/handoffs/`
+> - Conventions (alignées sur le **code réel**) : `../orchestration/MASTER_CLAUDE.md`
+>
+> En cas de conflit, **le code fait foi** (`../analysis/CODE_ANALYSIS.md`), puis
+> l'orchestration, puis ce document.
+
 # TRANSITIONS.md — Cartographie des phases du projet TopOpt
 
 **Objet** : Pour chaque phase, lister ce qui est acquis (et fiable), ce qui
