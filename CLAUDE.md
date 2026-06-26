@@ -5,22 +5,24 @@
 > `../analysis/_legacy/TopOptP2/CLAUDE.original.md`.
 
 ## Statut
-**Phase 2 incomplète : ~1/9 (fondation Metal seule).** Le solveur FEM 3D GPU
-(H8, assembly CSR, SpMV, CG, STL) **reste à écrire**. Rapport honnête :
-`PHASE_2_REPORT.md`. **Ne pas démarrer Phase 3 avant d'avoir terminé Phase 2**
-(cf. `../orchestration/handoffs/PHASE_2_TO_3.md`).
+**Phase 2 substantiellement complète (clôturée 2026-06-26).** Solveur TO 3D
+**matrix-free** sur GPU Metal, validé (patch test, cantilever, CG vs CPU, MBB 3D),
+`make` 0 warning, `make test` vert. Réserve : opti 128³ complète = 16.6 min (cible
+< 10 min non tenue avec Jacobi → corrigé par le multigrid Phase 3). Rapport :
+`PHASE_2_REPORT.md`. Handoff : `../orchestration/handoffs/PHASE_2_TO_3.md`.
 
-## Spécificités Phase 2 (font foi — cf. `../analysis/CODE_ANALYSIS.md`)
+## Spécificités Phase 2 (font foi — cf. `PHASE_2_REPORT.md`)
 - C++23 + **metal-cpp non-ARC** (ref counting manuel, `*_PRIVATE_IMPLEMENTATION`
   dans `src/gpu/metal_impl.cpp`, forward decls MTL:: dans les headers).
-- Build **two-phase** : `.metal → build/shaders.metallib`, puis C++ + link
-  (`-framework Metal -framework Foundation -framework QuartzCore`).
-- `newLibrary("build/shaders.metallib")` (CLI, pas `newDefaultLibrary`),
-  `StorageModeShared` (mémoire unifiée).
-- Vendoring : `third_party/metal-cpp` → symlink vers `../shared/third_party/metal-cpp`.
-- ADR-001..004 (vierge Metal-only, float démo, build 0 warning) : `docs/DECISIONS.md`.
-- Reste-à-faire : H8, assembly CSR GPU (atomicAdd, LL-LIT-008), SpMV, CG Jacobi
-  (float, LL-LIT-009), filtre GPU, marching cubes → STL.
+- Build **two-phase** : `.metal → build/shaders.metallib`, puis C++ + link.
+  Makefile partitionné CPU / GPU_CORE / GPU_SOLVER / IO.
+- **Matrix-free** : K jamais assemblée ; K·u par node-gather (kernel `mf_matvec_elastic`).
+  CG Jacobi (`CGSolver3D`). Filtre Helmholtz matrix-free scalaire (`Helmholtz3D`).
+- **Emin = 1e-4** (pas 1e-9) : requis par le CG itératif float32 (LL-006).
+- `newLibrary("build/shaders.metallib")`, `StorageModeShared`. Deps via symlinks
+  `third_party/{metal-cpp,eigen,nlohmann}` → `../shared/third_party`.
+- ADR-001..008 : `docs/DECISIONS.md`.
+- Commands : `make`, `make test`, `make run` (mbb 60³), `./build/topopt bench 128`.
 
 ## Commands
 - Build : `make` · Test : `make test` (vec_add GPU vs CPU) · Run : `make run` · Clean : `make clean`

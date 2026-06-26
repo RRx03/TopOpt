@@ -10,3 +10,6 @@ __pycache__/
 *.pyc
 xcuserdata/
 DerivedData/
+
+# Generated optimization outputs (STL, logs)
+output/

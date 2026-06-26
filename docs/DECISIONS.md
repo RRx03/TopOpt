@@ -39,3 +39,36 @@
 - **Conséquences** : hello-world en float (suffisant) ; décision FEM à acter
   avant l'assembly 3D (test patch 1e-6 en float, 1e-10 en double — cf.
   ../TopOptP1/TRANSITIONS.md).
+
+## ADR-005 : Solveur élastique matrix-free (pas de K assemblée)
+- **Date** : 2026-06-26
+- **Contexte** : produit K·u au cœur du CG. CSR assemblée à 128³ ≈ 2-4 GB et exige
+  un assembly GPU avec atomicAdd (races).
+- **Options** : CSR assemblé + SpMV ; matrix-free node-gather ; CSR puis matrix-free.
+- **Décision** : **matrix-free**. K·u recalculé par nœud depuis KE0 (constant) × Emod.
+- **Conséquences** : ~150 MB au lieu de 2-4 GB à 128³, pas d'atomics, scalable.
+  Diverge du plan CSR initial (validé par l'utilisateur). Prolongation/restriction
+  Phase 3 opèrent sans structure CSR.
+
+## ADR-006 : Emin = 1e-4 pour le solveur itératif (vs 1e-9 direct en P1)
+- **Date** : 2026-06-26
+- **Contexte** : SIMP Emin=1e-9 (P1, solveur direct) rend K quasi-singulière dans le
+  vide → CG Jacobi float32 diverge (cond ~1e9).
+- **Décision** : Emin = 1e-4·E0 pour la voie itérative GPU.
+- **Conséquences** : CG converge, compliance monotone. Phase 3 (multigrid) pourra
+  rebaisser Emin. Cf. LL-006.
+
+## ADR-007 : Filtre Helmholtz GPU matrix-free ; OC exploite la conservation de volume
+- **Date** : 2026-06-26
+- **Contexte** : filtre PDE appliqué ~15× par itération si re-filtré dans la
+  bissection OC (coûteux à 128³).
+- **Décision** : filtre matrix-free scalaire GPU ; la bissection OC se fait sur
+  `rho.sum()` (le filtre conserve la moyenne), un seul filtrage par itération.
+- **Conséquences** : 60×20×20 : 73 s → 51.7 s, volume tenu. Cf. LL-007.
+
+## ADR-008 : Visualisation = surface des voxels solides en STL binaire
+- **Date** : 2026-06-26
+- **Contexte** : besoin d'un STL ouvrable (MeshLab) du design.
+- **Décision** : émettre les faces de bord des cellules ρ≥0.5 (watertight).
+- **Conséquences** : robuste et manifold ; iso-surface lisse (marching cubes)
+  différée en Phase 3.
