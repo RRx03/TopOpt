@@ -107,6 +107,13 @@ Le cas MBB beam est le benchmark canonique de toute la communauté TO.
 Migrer le solveur vers 3D sur GPU. Le défi n'est pas TO (algorithme inchangé)
 mais la maîtrise de Metal pour le FEM creux.
 
+> **Statut (clôturé 2026-06-26)** : fait, mais via une approche **matrix-free**
+> (K jamais assemblée) plutôt que CSR — supérieure pour 128³ (mémoire, pas
+> d'atomics). Validé : patch 3D, cantilever, CG vs CPU, MBB 3D ; solve 128³ 6.4 s.
+> Réserve : opti 128³ complète 16.6 min (Jacobi faible → multigrid Phase 3). Détail :
+> `TopOptP2/PHASE_2_REPORT.md`, `../orchestration/handoffs/PHASE_2_TO_3.md`.
+> Les mentions "CSR" ci-dessous sont historiques.
+
 ### Acquis en sortie de phase
 
 - ✓ Tout l'acquis Phase 1, mais en 3D
