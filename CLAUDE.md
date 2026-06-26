@@ -1,68 +1,35 @@
-# TopOpt — Phase 2 (3D + Metal GPU)
+# CLAUDE.md — TopOpt Phase 2 (overrides)
 
-## Purpose
-Solveur de topology optimization 3D sur GPU via Metal. Algorithme TO
-identique à Phase 1 (SIMP + OC + filtre Helmholtz + adjoint analytique
-compliance), porté en 3D (hexaèdres H8) avec compute sur GPU Apple Silicon.
-Phase 1 (2D CPU, validée) : ../TopOptP1.
+> **Autorité : `../orchestration/MASTER_CLAUDE.md`.** Ce fichier ne contient que
+> les spécificités Phase 2. Version originale archivée :
+> `../analysis/_legacy/TopOptP2/CLAUDE.original.md`.
 
-## Stack
-- C++23, clang, macOS Apple Silicon
-- metal-cpp (header-only, macOS26/iOS26) vendorisé dans third_party/metal-cpp
-- Shaders compute Metal (.metal → build/shaders.metallib)
-- Frameworks : Metal, Foundation, QuartzCore
-- Build : Makefile two-phase (shaders → metallib, puis C++ + link)
+## Statut
+**Phase 2 incomplète : ~1/9 (fondation Metal seule).** Le solveur FEM 3D GPU
+(H8, assembly CSR, SpMV, CG, STL) **reste à écrire**. Rapport honnête :
+`PHASE_2_REPORT.md`. **Ne pas démarrer Phase 3 avant d'avoir terminé Phase 2**
+(cf. `../orchestration/handoffs/PHASE_2_TO_3.md`).
 
-## Architecture (brief)
-Session 1 : fondation Metal seule.
-- gpu/MetalContext : device, queue, chargement library, capacités
-- shaders/ : kernels compute → build/shaders.metallib
-- tests/test_metal_hello : vector-add GPU vs CPU
-À venir : assembly FEM 3D, SpMV CSR, CG préconditionné Jacobi sur GPU
-(cf. ../TopOptP1/TRANSITIONS.md, section Phase 2).
-→ Détails : `docs/ARCHITECTURE.md`
-
-## Directory map
-- `src/gpu/` : contexte Metal + (futur) host code des kernels
-- `shaders/` : kernels .metal
-- `tests/` : mains de test autonomes
-- `third_party/metal-cpp/` : metal-cpp Apple vendorisé
-- `build/` : objets, .air, .metallib, binaires
+## Spécificités Phase 2 (font foi — cf. `../analysis/CODE_ANALYSIS.md`)
+- C++23 + **metal-cpp non-ARC** (ref counting manuel, `*_PRIVATE_IMPLEMENTATION`
+  dans `src/gpu/metal_impl.cpp`, forward decls MTL:: dans les headers).
+- Build **two-phase** : `.metal → build/shaders.metallib`, puis C++ + link
+  (`-framework Metal -framework Foundation -framework QuartzCore`).
+- `newLibrary("build/shaders.metallib")` (CLI, pas `newDefaultLibrary`),
+  `StorageModeShared` (mémoire unifiée).
+- Vendoring : `third_party/metal-cpp` → symlink vers `../shared/third_party/metal-cpp`.
+- ADR-001..004 (vierge Metal-only, float démo, build 0 warning) : `docs/DECISIONS.md`.
+- Reste-à-faire : H8, assembly CSR GPU (atomicAdd, LL-LIT-008), SpMV, CG Jacobi
+  (float, LL-LIT-009), filtre GPU, marching cubes → STL.
 
 ## Commands
-- Build : `make`
-- Test  : `make test`   (lance build/test_metal_hello)
-- Run   : `make run`
-- Clean : `make clean`
+- Build : `make` · Test : `make test` (vec_add GPU vs CPU) · Run : `make run` · Clean : `make clean`
 
-## Read first every session
-1. Ce fichier
-2. `STATUS.md`
-3. `../TopOptP1/TRANSITIONS.md` (roadmap des phases + checkpoints)
+## Read first
+1. `../orchestration/MASTER_CLAUDE.md`
+2. Ce fichier · `STATUS.md` · `PHASE_2_REPORT.md`
+3. `../orchestration/handoffs/PHASE_1_TO_2.md`
 
 ## Read on demand
-- `docs/ARCHITECTURE.md` — modification structurelle
-- `docs/SYMBOLS.md` — localiser un symbole
-- `docs/DECISIONS.md` — comprendre un choix passé
-- `TASKS.md` — prioriser
-
-## Domain context
-Objectif long terme : TO multiphysique fluide-structure-thermique. Phase 2 =
-3D structurel sur GPU, précision float à ce stade (choix float/double différé).
-Cible 128³ ≈ 6M DOF, CG+Jacobi, < 10 min/solve.
-
-## Project-specific rules
-- Continuité Phase 1 : ajouts seulement, pas de refactor du 2D (../TopOptP1).
-- metal-cpp : `-fno-objc-arc` sur les TU Metal ; `*_PRIVATE_IMPLEMENTATION`
-  dans un seul .cpp (`src/gpu/metal_impl.cpp`) ; headers vendorisés en
-  `-isystem` pour garder `-Wall -Wextra -Wpedantic` à zéro warning.
-- Pas de framework graphique (compute pur pour l'instant).
-- Valider les checkpoints `TRANSITIONS.md` avant de passer à la suite.
-
-## Gotchas
-- `newDefaultLibrary()` ne marche qu'en .app bundle ; CLI → `newLibrary(path)`
-  avec "build/shaders.metallib".
-- `StorageModeShared` sur Apple Silicon (mémoire unifiée) : pas de copie CPU↔GPU.
-- `dispatchThreads()` (grille non-uniforme) : Apple Silicon ; threadgroup
-  ≤ `maxTotalThreadsPerThreadgroup`, multiple de 32.
-- M4 Max → GPU family Apple9, ~55.7 GB recommended working set.
+- `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/SYMBOLS.md`
+- `../analysis/CODE_ANALYSIS.md` — faits sur le code réel
