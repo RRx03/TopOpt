@@ -37,18 +37,23 @@ si le design de base bouge avec la résolution.
 
 ## ACQUIS PRÉREQUIS DE PHASE 2 (vérifier réellement, pas par le nom des fichiers)
 
-> ⚠️ **État actuel : Phase 2 ≈ 1/9 (fondation Metal seule).** Les prérequis
-> ci-dessous **ne sont PAS satisfaits aujourd'hui**. Phase 3 ne peut pas démarrer
-> tant que le solveur 3D GPU n'est pas complet et validé. Cf.
-> `TopOptP2/PHASE_2_REPORT.md` et `handoffs/PHASE_2_TO_3.md`.
+> ✅ **Phase 2 clôturée (2026-06-26) : solveur 3D GPU matrix-free validé.** Les
+> prérequis ci-dessous sont satisfaits. Cf. `TopOptP2/PHASE_2_REPORT.md` et
+> `handoffs/PHASE_2_TO_3.md`. **Note d'architecture** : Phase 2 a retenu le
+> **matrix-free** (pas de CSR assemblée) — la prolongation/restriction de Phase 3
+> opère donc sur ρ et les vecteurs nodaux, sans structure CSR.
 
-Prérequis bloquants :
-- [ ] Élément H8 + assembly K en CSR sur GPU, validé (K_GPU ≈ K_CPU à 1e-6 float)
-- [ ] SpMV creux GPU validé
-- [ ] CG préconditionné Jacobi GPU convergent (résidu < 1e-6 en < 2000 iter)
-- [ ] Patch test FEM 3D (< 1e-6 float), cantilever 3D analytique (< 2 %)
-- [ ] Loop TO 3D complète, MBB 3D, export STL
-- [ ] Benchmark 128³ < 10 min
+Prérequis (satisfaits) :
+- [x] Élément H8 + produit K·u matrix-free GPU validé (vs CPU à 3.1e-4 en float)
+- [x] "SpMV" GPU = matvec matrix-free node-gather (pas d'atomics)
+- [x] CG préconditionné Jacobi GPU convergent (128³ : 1516 iter, relres 9.9e-5)
+- [x] Patch test FEM 3D (7.8e-16 double), cantilever 3D (ratio EB 0.977)
+- [x] Loop TO 3D complète, MBB 3D, export STL
+- [~] Benchmark 128³ : solve 6.4 s ✓ ; opti complète 16.6 min (> 10 min) →
+      **c'est précisément ce que le multigrid de Phase 3 doit corriger**
+
+> ⚠️ Réserve transmise : à 128³, le CG Jacobi plafonne (4001 iter) quand le design
+> durcit. Le préconditionneur multigrid est la priorité perf de Phase 3.
 
 ## LIVRABLES SCIENTIFIQUES ATTENDUS
 

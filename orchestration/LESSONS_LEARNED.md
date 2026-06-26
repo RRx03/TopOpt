@@ -75,7 +75,32 @@ LL-004 car LL-002/003 étaient déjà pris.)*
 ---
 
 ## Catégorie : Erreurs de Metal/GPU
-*(À enrichir en Phase 2 et au-delà)*
+
+### LL-006 : Emin=1e-9 incompatible avec CG itératif float32 (Phase 2, 2026-06-26)
+- **Symptôme** : la boucle TO 3D GPU diverge — compliance oscille follement, valeurs
+  négatives, CG plafonne à maxiter sans converger (relres jamais atteinte)
+- **Cause** : SIMP `E=Emin+ρ^p(E0−Emin)` avec Emin=1e-9 (valeur Phase 1, solveur
+  DIRECT) rend K quasi-singulière dans les zones vides → conditionnement ~1e9 →
+  CG Jacobi en float32 incapable de converger
+- **Conséquence** : design aberrant, optimisation inutilisable
+- **Leçon** : pour un solveur **itératif float32**, borner le contraste de rigidité.
+  Emin = 1e-4·E0 (ratio 1e4) converge proprement (compliance 230→18.5, monotone).
+  Les solveurs directs tolèrent 1e-9 ; pas les itératifs. (Phase 3 multigrid
+  permettra de rebaisser Emin.)
+- **Vérification** : compliance monotone décroissante + CG iters << maxiter
+
+### LL-007 : Filtre Helmholtz conservatif → ne pas re-filtrer dans la bissection OC (Phase 2, 2026-06-26)
+- **Symptôme** : à 128³, l'OC appelle le filtre ~15× par itération (boucle de
+  bissection sur le volume) → coût dominé par un filtre itératif coûteux
+- **Cause** : portage naïf de l'OC Phase 1 (filtre direct, re-filtrage gratuit)
+- **Conséquence** : itération TO ~30% plus lente que nécessaire à grande échelle
+- **Leçon** : le filtre Helmholtz **conserve la moyenne** (sum(ρ̃)=sum(ρ)), donc la
+  contrainte de volume se vérifie sur `rho.sum()` directement ; filtrer **une seule
+  fois** à la fin de l'OC. Vérifié : volume tenu à 0.3000, temps 73s→51.7s (60×20×20)
+- **Vérification** : volume final == cible ; sum(filter(uniforme)) == sum(uniforme)
+
+## Catégorie : Erreurs de Metal/GPU (suite)
+*(À enrichir au-delà)*
 
 ---
 
