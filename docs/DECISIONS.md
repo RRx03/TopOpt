@@ -72,3 +72,37 @@
 - **Décision** : émettre les faces de bord des cellules ρ≥0.5 (watertight).
 - **Conséquences** : robuste et manifold ; iso-surface lisse (marching cubes)
   différée en Phase 3.
+
+## ADR-009 : Continuation de p configurable (inherit / restart / custom)
+- **Date** : 2026-06-27
+- **Contexte** : en multi-grid, faut-il repartir p=1 à chaque niveau (liberté
+  topologique, coûteux) ou hériter p=3 (rapide, topologie figée par le grossier) ?
+  Les features fines (canaux de refroidissement) nucléent tard et seulement à
+  grille fine → besoin d'arbitrer selon la pièce.
+- **Décision** : politique configurable. `inherit` (défaut) = continuation sur le
+  grossier puis p=3 ; `restart` = continuation à chaque niveau ; `custom` = p cible
+  par niveau. `ContinuationParams` est une struct générique.
+- **Conséquences** : l'architecte choisit le compromis coût/liberté. La struct
+  accueillera les continuations P4-P5 (ε-relaxation, α_max, β) sans refonte.
+  Couplage à documenter : continuation × rayon de filtre (cf. report §4.4).
+
+## ADR-010 : Transferts inter-grilles conservatifs
+- **Date** : 2026-06-27
+- **Décision** : prolongation densité par injection (enfant = parent), restriction
+  par moyenne des 8 enfants. Tous deux préservent la moyenne (volume).
+- **Conséquences** : round-trip exact (2,2e-16), volume tenu entre niveaux
+  (LL-LIT-010). Round-trip = identité utile pour les tests.
+
+## ADR-011 : Mesh independence par filtre à rayon physique (mm)
+- **Date** : 2026-06-27
+- **Décision** : rayon de filtre en mm, `r_cells = r_mm / h`. Taille mini de
+  feature fixée en unités physiques, invariante à la résolution (Lazarov-Sigmund).
+- **Conséquences** : designs 32³/64³/128³ topologiquement cohérents à r=2 mm.
+
+## ADR-012 : V-cycle multigrid différé ; warm-start seul pour Phase 3
+- **Date** : 2026-06-27
+- **Contexte** : le 5-10× de la littérature suppose un préconditionneur V-cycle ;
+  le warm-start seul donne 2,4× (998→419 s) et atteint déjà la cible < 10 min.
+- **Décision** : livrer Phase 3 avec warm-start ; différer le V-cycle.
+- **Conséquences** : CG reste Jacobi (plafonne à 4001 iter au niveau fin) ; le
+  V-cycle reste l'optimisation perf suivante (prompt d'approfondissement: report §8).
