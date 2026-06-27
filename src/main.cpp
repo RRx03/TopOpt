@@ -9,10 +9,14 @@
 #include <Foundation/Foundation.hpp>
 
 #include "core/Grid3D.hpp"
+#include "core/Grid3DMultiLevel.hpp"
 #include "fem/H8Element.hpp"
 #include "filter/Helmholtz3D.hpp"
 #include "gpu/CGSolver3D.hpp"
 #include "io/STLExporter.hpp"
+#include "problems/MBB3D.hpp"
+#include "topopt/ContinuationPolicy.hpp"
+#include "topopt/MultiGridOptimizer.hpp"
 #include "topopt/SIMP3D.hpp"
 
 using namespace topopt;
@@ -26,48 +30,65 @@ struct Problem {
     double volfrac = 0.3, penal = 3.0, filter_radius = 1.5, move = 0.2;
     // Emin=1e-4 (not 1e-9 as in Phase 1): the iterative float32 CG needs a
     // bounded stiffness contrast or K becomes too ill-conditioned in the void
-    // regions and Jacobi-PCG stalls (cf. LL-LIT-009). Direct solvers tolerate
+    // regions and Jacobi-PCG stalls (cf. LL-006). Direct solvers tolerate
     // 1e-9; matrix-free iterative ones do not.
     double E0 = 1.0, Emin = 1e-4, nu = 0.3;
     float cg_tol = 1e-4f;
     int cg_maxiter = 4000;
 };
 
-// 3D MBB (half-domain by symmetry, extruded). BCs:
-//   x=0 face: ux=0 (symmetry plane)        z=0 face: uz=0 (symmetry plane)
-//   bottom-right edge (x=L, y=0, all z): uy=0 (roller)
-//   load: downward (-y) along the top-left edge (x=0, y=H, all z)
-void mbbBoundary(const Grid3D& g, std::vector<std::uint8_t>& fixedMask, Vec& F) {
-    fixedMask.assign(static_cast<size_t>(g.nDof()), 0);
-    auto fix = [&](int dof) { fixedMask[static_cast<size_t>(dof)] = 1; };
+// Multi-grid warm-start optimization (Phase 3). Builds an L-level hierarchy from
+// the finest dims and runs coarse->fine. Continuation mode selectable.
+int runMultiGrid(int nelxFine, int nLevels, int itersPerLevel,
+                 ContinuationPolicy::Mode mode) {
+    NS::AutoreleasePool* pool = NS::AutoreleasePool::alloc()->init();
+    const int nyFine = nelxFine, nzFine = nelxFine;  // cube (comparable to bench)
+    if (!Grid3DMultiLevel::divisible(nelxFine, nyFine, nzFine, nLevels)) {
+        std::fprintf(stderr, "dims %dx%dx%d not divisible by 2^%d\n", nelxFine,
+                     nyFine, nzFine, nLevels - 1);
+        pool->release();
+        return 2;
+    }
+    std::filesystem::create_directories("output");
 
-    for (int k = 0; k <= g.nelz(); ++k)
-        for (int j = 0; j <= g.nely(); ++j)
-            fix(3 * g.nodeId(0, j, k) + 0);            // x=0: ux=0
-    for (int j = 0; j <= g.nely(); ++j)
-        for (int i = 0; i <= g.nelx(); ++i)
-            fix(3 * g.nodeId(i, j, 0) + 2);            // z=0: uz=0
-    for (int k = 0; k <= g.nelz(); ++k)
-        fix(3 * g.nodeId(g.nelx(), 0, k) + 1);         // bottom-right edge: uy=0
+    Grid3DMultiLevel mg(nelxFine, nyFine, nzFine, nLevels, 60.0);  // 60 mm span
+    gpu::MetalContext ctx;
+    if (!ctx.valid()) { std::fprintf(stderr, "no Metal\n"); pool->release(); return 1; }
 
-    F = Vec::Zero(g.nDof());
-    const double fz = -1.0 / (g.nelz() + 1);
-    for (int k = 0; k <= g.nelz(); ++k)
-        F(3 * g.nodeId(0, g.nely(), k) + 1) = fz;      // load top-left edge
+    MultiGridOptimizer::Params p;
+    p.itersPerLevel = itersPerLevel;
+    p.filterRadius_mm = 2.0;
+    ContinuationPolicy policy(mode, /*penalMax=*/3.0, /*penalStart=*/1.0,
+                              /*rampIters=*/itersPerLevel);
+    MultiGridOptimizer opt(ctx, mg, p, policy);
+
+    const char* modeName = mode == ContinuationPolicy::Mode::Inherit ? "inherit"
+                         : mode == ContinuationPolicy::Mode::Restart ? "restart"
+                                                                     : "custom";
+    std::printf("MULTIGRID finest %dx%dx%d, %d levels, %d it/level, continuation=%s\n",
+                nelxFine, nyFine, nzFine, nLevels, itersPerLevel, modeName);
+
+    const auto res = opt.run(mbb3dBoundary);
+    if (!res.ok) { pool->release(); return 1; }
+
+    char path[64];
+    std::snprintf(path, sizeof(path), "output/mg_%d.stl", nelxFine);
+    STLExporter::writeVoxelSurface(path, res.rhoPhysFine, mg.finest(), 0.5);
+    std::printf("done: C=%.4f in %.1fs -> %s\n", res.finalCompliance,
+                res.seconds, path);
+    pool->release();
+    return 0;
 }
 
-} // namespace
-
-namespace {
-// Benchmark a single FEM solve at n x (n/2) x (n/2) with uniform density,
-// reporting wall time, CG iterations and peak GPU working set.
+// Benchmark a single FEM solve at n^3 with uniform density, reporting wall time,
+// CG iterations and peak GPU working set.
 int runBench(int n) {
     NS::AutoreleasePool* pool = NS::AutoreleasePool::alloc()->init();
     Problem p;
     Grid3D grid(n, n, n);   // canonical n^3 cube
     std::vector<std::uint8_t> fixedMask;
     Vec F;
-    mbbBoundary(grid, fixedMask, F);
+    mbb3dBoundary(grid, fixedMask, F);
 
     gpu::MetalContext ctx;
     if (!ctx.valid()) { std::fprintf(stderr, "no Metal\n"); pool->release(); return 1; }
@@ -105,8 +126,22 @@ int main(int argc, char** argv) {
         const int n = (argc > 2) ? std::atoi(argv[2]) : 128;
         return runBench(n);
     }
+    if (mode == "mg") {
+        const int nFine = (argc > 2) ? std::atoi(argv[2]) : 96;
+        const int nLevels = (argc > 3) ? std::atoi(argv[3]) : 3;
+        const int itPer = (argc > 4) ? std::atoi(argv[4]) : 25;
+        ContinuationPolicy::Mode cm = ContinuationPolicy::Mode::Inherit;
+        if (argc > 5) {
+            const std::string m = argv[5];
+            if (m == "restart") cm = ContinuationPolicy::Mode::Restart;
+            else if (m == "inherit") cm = ContinuationPolicy::Mode::Inherit;
+        }
+        return runMultiGrid(nFine, nLevels, itPer, cm);
+    }
     if (mode != "mbb") {
-        std::fprintf(stderr, "usage: %s mbb [nelx nely nelz maxiter] | bench [n]\n",
+        std::fprintf(stderr,
+                     "usage: %s mbb [nelx nely nelz maxiter] | "
+                     "mg [nFine nLevels itPerLevel inherit|restart] | bench [n]\n",
                      argv[0]);
         return 2;
     }
@@ -124,7 +159,7 @@ int main(int argc, char** argv) {
     Grid3D grid(p.nelx, p.nely, p.nelz);
     std::vector<std::uint8_t> fixedMask;
     Vec F;
-    mbbBoundary(grid, fixedMask, F);
+    mbb3dBoundary(grid, fixedMask, F);
 
     gpu::MetalContext ctx;
     if (!ctx.valid()) {

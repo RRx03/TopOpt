@@ -23,7 +23,8 @@ CPU_SRCS := $(SRC)/fem/H8Element.cpp $(SRC)/fem/FEM3D.cpp \
 # Metal context core (device/queue/library + single metal-cpp impl TU).
 GPU_CORE_SRCS := $(SRC)/gpu/MetalContext.cpp $(SRC)/gpu/metal_impl.cpp
 # GPU solvers (matrix-free CG + Helmholtz filter), depend on CPU FEM core.
-GPU_SOLVER_SRCS := $(SRC)/gpu/CGSolver3D.cpp $(SRC)/filter/Helmholtz3D.cpp
+GPU_SOLVER_SRCS := $(SRC)/gpu/CGSolver3D.cpp $(SRC)/filter/Helmholtz3D.cpp \
+                   $(SRC)/topopt/MultiGridOptimizer.cpp
 # IO.
 IO_SRCS  := $(SRC)/io/STLExporter.cpp
 
