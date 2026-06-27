@@ -1,29 +1,28 @@
 # Status — 2026-06-27
 
 ## Current focus
-**Phase 3 clôturée** : multi-grid warm-start + mesh independence + continuation configurable.
+**Phase 4 (NIVEAU CRITIQUE), session 1 faite** : solveur thermique stationnaire seul.
 
 ## Last session (2026-06-27)
-- `MultiGridOptimizer` (coarse→fine warm-start), `ContinuationPolicy`
-  (inherit/restart/custom), `GridTransfer`, `Grid3DMultiLevel`,
-  `HelmholtzFilterPhysical`, `problems/MBB3D`.
-- **Speedup** : opti 128³ 998 s → **419 s (2,4×, < 10 min)** — cible atteinte.
-- **Mesh independence** : 32³/64³/128³ à rayon physique 2 mm, vol 0,30 (STLs).
-- **Fix LL-008** : clamp rhoPhys≥0 avant pow + cap bissection OC (boucle infinie
-  révélée par la continuation, p non entier × undershoot filtre).
-- Tests : round-trip 2,2e-16, conservation volume exacte, FEM régression OK. 0 warning.
+- Squelette P4 depuis base multi-grid Phase 3 (build 0 warning).
+- `ThermalSolver` : conduction `−div(k∇T)=q`, matrix-free GPU scalaire (Laplacien
+  H8 `H8Element::diffusion()`, CG Jacobi). Kernels `shaders/thermal.metal`.
+- `test_thermal` : plaque gradient linéaire T(L) à 8.9e-7 (patch exact float),
+  linéarité exacte. Régression suite héritée : OK. 0 warning.
 
-## Next up (Phase 4)
-1. Solveur thermique stationnaire (bloc indépendant d'abord).
-2. Couplage thermo-élastique faible (ε_th → F_thermal).
-3. von Mises + p-norm + **ε-relaxation** ; **MMA** ; **adjoint 2 blocs + DF**.
-4. Géométrie 2D axisymétrique ; cas tuyère.
-→ `../orchestration/handoffs/PHASE_3_TO_4.md`, `../orchestration/prompts/PHASE_4_BRIEF.md`.
+## Next up (Phase 4, ordre du brief)
+2. Couplage thermo-élastique faible : ε_th=α(T−T_ref) → F_thermal, validation 3D.
+3. von Mises + p-norm + **ε-relaxation** (LL-LIT-001).
+4. **Adjoint 2 blocs + validation DF 10×10** (LL-LIT-007) — GATE BLOQUANT.
+5. **MMA** (remplace OC).
+6. Géométrie 2D axisymétrique (singularité r=0).
+7. Cas tuyère 2D axi (pression + flux thermique) ; épaississement au col.
 
-## Dette / différé
-- **V-cycle multigrid différé** (CG reste Jacobi, plafonne au niveau fin) — prompt
-  d'approfondissement dans `PHASE_3_REPORT.md` §8. Speedup 2,4× (pas 5-10×).
+## Blockers / vigilance
+- Adjoint multi-bloc : NE PAS avancer sans validation DF à 1e-5.
+- Stress singularity : ε-relaxation dès la 1ère version des contraintes.
+- LL-008 (déjà rencontré P3) : clamper densité avant pow, borner bissections.
 
 ## Don't touch
-- `../TopOptP1`, `../TopOptP2` (figés).
+- `../TopOptP1`, `../TopOptP2`, `../TopOptP3` (figés).
 - `third_party/*` (symlinks vers ../shared/third_party).

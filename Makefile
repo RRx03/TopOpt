@@ -24,7 +24,8 @@ CPU_SRCS := $(SRC)/fem/H8Element.cpp $(SRC)/fem/FEM3D.cpp \
 GPU_CORE_SRCS := $(SRC)/gpu/MetalContext.cpp $(SRC)/gpu/metal_impl.cpp
 # GPU solvers (matrix-free CG + Helmholtz filter), depend on CPU FEM core.
 GPU_SOLVER_SRCS := $(SRC)/gpu/CGSolver3D.cpp $(SRC)/filter/Helmholtz3D.cpp \
-                   $(SRC)/topopt/MultiGridOptimizer.cpp
+                   $(SRC)/topopt/MultiGridOptimizer.cpp \
+                   $(SRC)/physics/ThermalSolver.cpp
 # IO.
 IO_SRCS  := $(SRC)/io/STLExporter.cpp
 
@@ -45,10 +46,11 @@ TEST_FEM   := $(BUILD)/test_fem3d
 TEST_CG    := $(BUILD)/test_cg_gpu
 TEST_MBB   := $(BUILD)/test_mbb3d
 TEST_MG    := $(BUILD)/test_multigrid
+TEST_TH    := $(BUILD)/test_thermal
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
-all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TOPOPT) $(METALLIB)
+all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TOPOPT) $(METALLIB)
 
 # --- link rules ---
 $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
@@ -69,10 +71,14 @@ $(TOPOPT): $(CPU_OBJS) $(GPU_OBJS) $(IO_OBJS) $(OBJ)/main.o
 $(TEST_MG): $(CPU_OBJS) $(OBJ)/test_multigrid.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
+$(TEST_TH): $(CPU_OBJS) $(GPU_OBJS) $(OBJ)/test_thermal.o
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
 # Full GPU test suite (needs the metallib).
 test: all
 	./$(TEST_FEM)
 	./$(TEST_MG)
+	./$(TEST_TH)
 	./$(TEST_CG)
 	./$(TEST_HELLO)
 	./$(TEST_MBB)
@@ -104,4 +110,4 @@ $(METALLIB): $(METAL_AIR)
 
 clean:
 	rm -rf $(OBJ) $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) \
-	       $(TOPOPT) $(METAL_AIR) $(METALLIB)
+	       $(TEST_TH) $(TOPOPT) $(METAL_AIR) $(METALLIB)

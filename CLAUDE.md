@@ -1,35 +1,35 @@
-# CLAUDE.md — TopOpt Phase 3 (overrides)
+# CLAUDE.md — TopOpt Phase 4 (overrides)
 
-> **Autorité : `../orchestration/MASTER_CLAUDE.md`.** Spécificités Phase 3
-> uniquement. Brief : `../orchestration/prompts/PHASE_3_BRIEF.md`. Handoff :
-> `../orchestration/handoffs/PHASE_2_TO_3.md`.
+> **Autorité : `../orchestration/MASTER_CLAUDE.md`.** Spécificités Phase 4
+> uniquement. Brief : `../orchestration/prompts/PHASE_4_BRIEF.md`. Handoff :
+> `../orchestration/handoffs/PHASE_3_TO_4.md`.
 
 ## Statut
-**Phase 3 en cours — session 1 faite.** Base = solveur matrix-free Phase 2 (copié).
-Objectif : multi-grid uniforme + mesh independence + filtre rayon physique (mm).
+**Phase 4 en cours — session 1 faite (NIVEAU CRITIQUE).** Base = solveur
+multi-grid Phase 3 (copié). Objectif : couplage thermo-élastique + von Mises
+(p-norm + ε-relaxation) + MMA + adjoint 2 blocs (validé DF) + 2D axisymétrique.
 
-Session 1 livrée : `Grid3DMultiLevel` (hiérarchie ×2), `GridTransfer`
-(prolongation/restriction densité, **conservatives**), `HelmholtzFilterPhysical`
-(rayon mm). Tests : round-trip 2.2e-16, conservation volume exacte. 0 warning.
+Session 1 livrée : **solveur thermique stationnaire seul** (`ThermalSolver`,
+matrix-free GPU scalaire, `−div(k∇T)=q`). Validé : plaque gradient linéaire
+T(L) à 8.9e-7, linéarité exacte. Pas encore de couplage.
 
-## Spécificités Phase 3
-- Hérite de tout Phase 2 (matrix-free CG/Jacobi, Helmholtz3D, SIMP3D, STL).
-- **Nouveau** : hiérarchie de grilles 32³→…→256³ (facteur 2), warm-start,
-  filtre Helmholtz **rayon en mm** (mesh-independent, LL-LIT-006).
-- **Priorité perf** : préconditionneur **multigrid V-cycle** (faire tomber le coût
-  CG : 1516→4001 iter à 128³ en fin d'opti). Viser opti 128³ < 10 min.
-- Conservation de volume inter-niveaux obligatoire (LL-LIT-010) — déjà testée.
-- Décision à acter : continuation de p entre niveaux → `docs/DECISIONS.md`.
+## Spécificités Phase 4
+- Hérite tout Phase 3 (multi-grid, matrix-free, filtre mm, continuation policy).
+- Thermique = Laplacien H8 scalaire (`H8Element::diffusion()`), même CG/Jacobi.
+- **À venir** : couplage thermo-élastique faible (ε_th=α(T−T_ref)→F_thermal),
+  von Mises + p-norm + **ε-relaxation** (LL-LIT-001), **MMA** (remplace OC),
+  **adjoint 2 blocs validé par DF** (LL-LIT-007, gate bloquant), 2D axi (r=0).
+- Brancher l'ε-relaxation dans `ContinuationParams` (struct générique de P3).
+- Si couplage one-way → K asymétrique → BiCGStab/GMRES (LL-LIT-011).
 
 ## Commands
-- Build : `make` · Tests : `make test` (+ `make test_cpu` pour multigrid/fem sans GPU)
-- Run : `make run` · Clean : `make clean`
+- Build : `make` · Tests : `make test` (+ `make test_cpu`) · Clean : `make clean`
 
 ## Read first
 1. `../orchestration/MASTER_CLAUDE.md`
 2. Ce fichier · `STATUS.md`
-3. `../orchestration/handoffs/PHASE_2_TO_3.md` · `../orchestration/prompts/PHASE_3_BRIEF.md`
+3. `../orchestration/handoffs/PHASE_3_TO_4.md` · `../orchestration/prompts/PHASE_4_BRIEF.md`
 
 ## Read on demand
-- `../TopOptP2/PHASE_2_REPORT.md` — base matrix-free
+- `../TopOptP3/PHASE_3_REPORT.md` — base multi-grid
 - `docs/DECISIONS.md`, `docs/SYMBOLS.md`
