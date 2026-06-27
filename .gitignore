@@ -14,6 +14,7 @@ shared/third_party/
 # Phase directories have their own git repos (baseline snapshots)
 TopOptP1/
 TopOptP2/
+TopOptP3/
 
 # Deprecated personal versions and scratch metal-cpp copy
 V1 (deprecated)/
