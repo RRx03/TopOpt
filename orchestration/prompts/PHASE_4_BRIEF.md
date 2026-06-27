@@ -39,10 +39,17 @@ géométrie 2D axi ancre le projet dans la propulsion (tuyère réelle).
 
 ## ACQUIS PRÉREQUIS DE PHASE 3
 
-- [ ] Solveur 3D GPU multi-grid validé, mesh independence démontrée
-- [ ] Filtre Helmholtz à rayon physique (mm) opérationnel
-- [ ] Pipeline JSON → optim → STL fonctionnel
-- [ ] Adjoint compliance (mono-bloc) propre et compris (base de l'extension)
+> ✅ **Phase 3 clôturée (2026-06-27).** Prérequis satisfaits. Cf.
+> `TopOptP3/PHASE_3_REPORT.md` et `handoffs/PHASE_3_TO_4.md`.
+> **Note** : continuation générique (`ContinuationParams`) déjà en place — y
+> brancher l'ε-relaxation stress. V-cycle multigrid **différé** (warm-start seul,
+> 2,4×) ; si le coût des solves redevient bloquant, voir le prompt report §8.
+
+- [x] Solveur 3D GPU multi-grid (warm-start) validé, mesh independence démontrée
+- [x] Filtre Helmholtz à rayon physique (mm) opérationnel
+- [x] Pipeline jusqu'au STL fonctionnel
+- [x] Adjoint compliance (mono-bloc) propre — base de l'extension multi-bloc
+- [x] Optimiseur OC + infrastructure continuation (struct) prête pour MMA / ε-relaxation
 
 ## LIVRABLES SCIENTIFIQUES ATTENDUS
 

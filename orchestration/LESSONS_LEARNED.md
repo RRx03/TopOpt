@@ -105,6 +105,24 @@ LL-004 car LL-002/003 étaient déjà pris.)*
 ---
 
 ## Catégorie : Erreurs de FEM
+
+### LL-008 : pow(rhoPhys négatif, p non entier) → NaN → boucle OC infinie (Phase 3, 2026-06-27)
+- **Symptôme** : la loop multi-grid se fige (100% CPU, aucune progression) pendant
+  la continuation, à p≈1.6 ; un run 32³ qui devrait durer 30 s tourne des heures
+- **Cause** : le filtre Helmholtz (lisseur PDE) peut produire des `rhoPhys`
+  légèrement < 0 (undershoot, surtout à petit rayon). `complianceSensitivity`
+  calcule `rhoPhys^(p-1)` → `pow(négatif, 0.6)` = **NaN**. Dans la bissection OC,
+  `NaN > target` est toujours faux → `l1` reste à 0, `l2` décroît, et le critère
+  `(l2−l1)/(l1+l2)` vaut **1 en permanence → boucle infinie**
+- **Pourquoi invisible en Phase 2** : le `main` P2 utilisait p=3 **fixe** (exposant
+  entier ; `pow(négatif, 2)` est défini). C'est la **continuation** de Phase 3
+  (p non entier) qui révèle le bug
+- **Leçon** : (1) clamper `rhoPhys` à [0,1] avant tout `pow` à exposant fractionnaire ;
+  (2) **toujours borner** une bissection (cap d'itérations) — un bracket qui ne
+  rétrécit pas à cause d'un NaN est une boucle infinie silencieuse
+- **Vérification** : la config qui figeait (`mg 32 3 20`) termine en 30 s, C décroît,
+  volume tenu
+
 *(À enrichir)*
 
 ---
