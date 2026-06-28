@@ -1,5 +1,13 @@
-# Symbols index — TopOptP3
-Last updated: 2026-06-27
+# Symbols index — TopOptP4
+Last updated: 2026-06-28
+
+## Classes / Structs (Phase 4)
+- `topopt::gpu::ThermalSolver` — src/physics/ThermalSolver.hpp — conduction GPU matrix-free (−div(k∇T)=q)
+- `topopt::ThermoElasticCoupling` — src/physics/ThermoElasticCoupling.hpp — F_th = E_e·α·Cth·(T_e−Tref)
+- `topopt::StressModel` — src/topopt/StressModel.hpp — von Mises + qp-relaxation ρ^q + p-norm
+- `topopt::ThermoElasticAdjoint` — src/adjoint/ThermoElasticAdjoint.hpp — adjoint 2 blocs (compliance + stress p-norm), validé DF
+- `H8Element::thermalCoupling/stressMatrix/vonMisesForm` — Cth 24×8, S0 6×24, V 6×6
+
 
 ## Classes / Structs (hérités Phase 2)
 - `topopt::Grid3D` — src/core/Grid3D.hpp — grille H8 structurée, numérotation row-major

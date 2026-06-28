@@ -106,3 +106,23 @@
 - **Décision** : livrer Phase 3 avec warm-start ; différer le V-cycle.
 - **Conséquences** : CG reste Jacobi (plafonne à 4001 iter au niveau fin) ; le
   V-cycle reste l'optimisation perf suivante (prompt d'approfondissement: report §8).
+
+## ADR-013 : Stress relaxé qp (rho^q vm0) + agrégation p-norm
+- **Date** : 2026-06-28
+- **Contexte** : la TO contrainte en stress souffre de la singularité (σ/ρ→∞ quand
+  ρ→0) qui empêche l'optimiseur de créer du vide (LL-LIT-001).
+- **Décision** : stress élémentaire relaxé `σ_e = ρ_e^q vm0_e` (qp-approach,
+  Bruggi 2008 ; q=0.5 par défaut, < p_SIMP), agrégé par p-norm
+  `σ_PN=(Σσ_e^P)^{1/P}` (P=8). vm0 = von Mises solide au centroïde (S0=D0·B, V).
+- **Conséquences** : σ_e→0 dans le vide (singularité levée). La p-norm sur-estime
+  le max (facteur N^{1/P} pour champ uniforme), acceptable car en TO le champ est
+  piqué. Sensibilité validée par DF (1.6e-7), réutilise l'adjoint 2 blocs.
+
+## ADR-014 : Adjoint stress = extension de l'adjoint compliance (helpers partagés)
+- **Date** : 2026-06-28
+- **Décision** : ne pas dupliquer ; `ThermoElasticAdjoint` porte les 2 objectifs
+  (compliance LᵀU et stress p-norm) via des helpers partagés (thermalAdjointRhs,
+  hereditaryGradient). Seuls diffèrent le RHS élastique (∂J/∂U) et le terme
+  explicite ∂J/∂ρ.
+- **Conséquences** : un seul code d'adjoint à maintenir/valider ; les futurs
+  objectifs (T_max, masse) s'y ajoutent de même. Validation CPU double (oracle).

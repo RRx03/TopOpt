@@ -6,16 +6,20 @@
 ## Progression Phase 4 (ordre du brief)
 1. ✅ Solveur thermique seul (`ThermalSolver`, GPU) — plaque gradient 8.9e-7.
 2. ✅ Couplage thermo-élastique faible (`ThermoElasticCoupling`) — dilatation libre 7.4e-6.
-4. ✅ **GATE adjoint 2 blocs validé par DF** (`ThermoElasticAdjoint`) — **1.6e-6 < 1e-5**.
-   - Validation CPU double précision (Eigen direct), DF centrées 8³, 20 éléments.
-   - Gradient = term_elastic − term_thload + term_cond ; les 3 actifs (couplage exercé).
-   - Réalisé par sous-session Agent, vérifié indépendamment (rebuild + re-run).
+4. ✅ **GATE adjoint compliance 2 blocs validé DF** (`ThermoElasticAdjoint`) — 1.59e-6.
+3. ✅ **Stress** : von Mises + qp-relaxation + p-norm (`StressModel`) — forward validé
+   (von Mises uniaxial 2.4e-15, relaxation ρ→0). **GATE sensibilité stress p-norm
+   validé DF — 1.62e-7** (adjoint étendu, 4 termes actifs). Compliance toujours verte.
 
 ## Next up
-3. von Mises + p-norm + **ε-relaxation** (LL-LIT-001) — étend J ; l'adjoint est en place.
-5. **MMA** (remplace OC) — multi-contraintes.
+5. **MMA** (remplace OC) — multi-contraintes (masse min sous σ_PN ≤ σ_yield, T_max).
 6. Géométrie 2D axisymétrique (singularité r=0).
 7. Cas tuyère 2D axi (pression + flux thermique) ; vérif épaississement au col.
+
+## Dette explicite
+- Adjoints (compliance + stress) validés en **CPU double** (oracle). Portage GPU
+  matrix-free float32 à faire pour la production grande échelle, à re-valider contre
+  le chemin CPU.
 
 ## Blockers / vigilance
 - Adjoint multi-bloc : **gate franchi** ✓. Tout nouvel objectif (stress) doit être
