@@ -7,6 +7,7 @@
 #include "core/Grid3D.hpp"
 #include "fem/FEM3D.hpp"
 #include "fem/H8Element.hpp"
+#include "topopt/StressModel.hpp"
 
 namespace topopt {
 
@@ -68,12 +69,42 @@ public:
     // Forward + discrete adjoint gradient.
     Solution solve(const Vec& rho) const;
 
+    // --- Stress p-norm objective (same forward, same 2 adjoint solves) ---------
+    // J = sigma_PN = (sum_e sigma_e^P)^(1/P), sigma_e = rho_e^q * vm0_e,
+    // vm0_e = sqrt(s_e^T V s_e), s_e = S0 u_e (S0 = StressModel::S0, V = vonMisesForm).
+    struct StressSolution {
+        Vec T;
+        Vec U;
+        double J = 0.0;     // sigma_PN
+        Vec grad;           // dJ/drho (nElems)
+        Vec termExplicit;   // dJ/drho|_explicit (via rho^q relaxation)
+        Vec termDjDu;       // contribution propagated through dJ/dU (elastic adjoint)
+        Vec termElastic;    // lam_e^T dE KE0 U
+        Vec termThermalLoad;  // -lam_e^T dE alpha C (T - Tref)
+        Vec termConduction;   // lam_t^T dk L0 T
+    };
+
+    // Forward solve -> sigma_PN only (used by the finite-difference oracle).
+    double stressPNorm(const Vec& rho, const StressModel& sm) const;
+
+    // Forward + discrete adjoint gradient of sigma_PN.
+    StressSolution stressPNormGrad(const Vec& rho, const StressModel& sm) const;
+
 private:
     Vec youngModulus(const Vec& rho) const;
     Vec conductivity(const Vec& rho) const;
     Vec thermalLoad(const Vec& Evec, const Vec& T) const;
     Vec solveThermal(const Vec& kvec, const Vec& rhs) const;
     void forward(const Vec& rho, Vec& T, Vec& U) const;
+
+    // RHS of the thermal adjoint: g = G^T lam_e (G = dF_th/dT), assembled by node.
+    Vec thermalAdjointRhs(const Vec& Evec, const Vec& lamE) const;
+
+    // The three rho-derivative terms shared by every objective: given the state
+    // (U, T) and adjoints (lam_e, lam_t), fill the per-element contributions.
+    void hereditaryGradient(const Vec& rho, const Vec& U, const Vec& T,
+                            const Vec& lamE, const Vec& lamT, Vec& termElastic,
+                            Vec& termThermalLoad, Vec& termConduction) const;
 
     const Grid3D& grid_;
     Material mat_;

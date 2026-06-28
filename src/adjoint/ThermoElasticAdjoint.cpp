@@ -144,8 +144,21 @@ ThermoElasticAdjoint::Solution ThermoElasticAdjoint::solve(
     // (1) Elastic adjoint: K_e lam_e = -L, with L = F_mech.
     const Vec lamE = fem_.solve(E, -Fmech_);
 
-    // (2) Thermal adjoint RHS: g = G^T lam_e.
-    //     Per element: 8-vector  E_e alpha C_e^T lam_e_local, assembled by node.
+    // (2) Thermal adjoint: K_t lam_t = G^T lam_e.
+    const Vec lamT = solveThermal(k, thermalAdjointRhs(E, lamE));
+
+    // (3) Gradient = the three shared rho-derivative terms (no explicit term).
+    hereditaryGradient(rho, sol.U, sol.T, lamE, lamT, sol.termElastic,
+                       sol.termThermalLoad, sol.termConduction);
+    sol.grad = sol.termElastic + sol.termThermalLoad + sol.termConduction;
+
+    return sol;
+}
+
+// RHS of the thermal adjoint: g = G^T lam_e, G = dF_th/dT.
+// Per element: 8-vector  E_e alpha C_e^T lam_e_local, assembled by node.
+ThermoElasticAdjoint::Vec ThermoElasticAdjoint::thermalAdjointRhs(
+    const Vec& Evec, const Vec& lamE) const {
     Vec gT = Vec::Zero(grid_.nNodes());
     for (int ez = 0; ez < grid_.nelz(); ++ez)
         for (int ey = 0; ey < grid_.nely(); ++ey)
@@ -155,20 +168,23 @@ ThermoElasticAdjoint::Solution ThermoElasticAdjoint::solve(
                 Eigen::Matrix<double, 24, 1> le;
                 for (int a = 0; a < 24; ++a)
                     le(a) = lamE(dofs[static_cast<size_t>(a)]);
-                const double scale = E(grid_.elemId(ex, ey, ez)) * mat_.alpha;
+                const double scale = Evec(grid_.elemId(ex, ey, ez)) * mat_.alpha;
                 const Eigen::Matrix<double, 8, 1> ce =
                     scale * (cth_.transpose() * le);
                 for (int a = 0; a < 8; ++a)
                     gT(nodes[static_cast<size_t>(a)]) += ce(a);
             }
-    const Vec lamT = solveThermal(k, gT);
+    return gT;
+}
 
-    // (3) Gradient, element-local assembly.
+void ThermoElasticAdjoint::hereditaryGradient(
+    const Vec& rho, const Vec& U, const Vec& T, const Vec& lamE,
+    const Vec& lamT, Vec& termElastic, Vec& termThermalLoad,
+    Vec& termConduction) const {
     const int nE = grid_.nElems();
-    sol.grad = Vec::Zero(nE);
-    sol.termElastic = Vec::Zero(nE);
-    sol.termThermalLoad = Vec::Zero(nE);
-    sol.termConduction = Vec::Zero(nE);
+    termElastic = Vec::Zero(nE);
+    termThermalLoad = Vec::Zero(nE);
+    termConduction = Vec::Zero(nE);
 
     for (int ez = 0; ez < grid_.nelz(); ++ez)
         for (int ey = 0; ey < grid_.nely(); ++ey)
@@ -179,12 +195,12 @@ ThermoElasticAdjoint::Solution ThermoElasticAdjoint::solve(
 
                 Eigen::Matrix<double, 24, 1> Ue, lE;
                 for (int a = 0; a < 24; ++a) {
-                    Ue(a) = sol.U(dofs[static_cast<size_t>(a)]);
+                    Ue(a) = U(dofs[static_cast<size_t>(a)]);
                     lE(a) = lamE(dofs[static_cast<size_t>(a)]);
                 }
                 Eigen::Matrix<double, 8, 1> Te, lT;
                 for (int a = 0; a < 8; ++a) {
-                    Te(a) = sol.T(nodes[static_cast<size_t>(a)]);
+                    Te(a) = T(nodes[static_cast<size_t>(a)]);
                     lT(a) = lamT(nodes[static_cast<size_t>(a)]);
                 }
 
@@ -204,12 +220,91 @@ ThermoElasticAdjoint::Solution ThermoElasticAdjoint::solve(
                 // lam_t^T (dK_t/drho) T = dk * lam_t^T L0 T
                 const double tc = dk * (lT.transpose() * l0_ * Te)(0, 0);
 
-                sol.termElastic(eid) = te;
-                sol.termThermalLoad(eid) = tf;
-                sol.termConduction(eid) = tc;
-                sol.grad(eid) = te + tf + tc;
+                termElastic(eid) = te;
+                termThermalLoad(eid) = tf;
+                termConduction(eid) = tc;
+            }
+}
+
+double ThermoElasticAdjoint::stressPNorm(const Vec& rho,
+                                         const StressModel& sm) const {
+    Vec T, U;
+    forward(rho, T, U);
+    const Vec vm0 = sm.vonMisesSolid(grid_, U);
+    const Vec sigma = sm.relaxedStress(rho, vm0);
+    return sm.pNorm(sigma);
+}
+
+ThermoElasticAdjoint::StressSolution ThermoElasticAdjoint::stressPNormGrad(
+    const Vec& rho, const StressModel& sm) const {
+    StressSolution sol;
+    forward(rho, sol.T, sol.U);
+
+    const double q = sm.qRelax();
+    const double P = sm.Pagg();
+    const auto& S0 = sm.S0();
+    const auto& V = sm.V();
+    const H8Element::Mat6 Vsym = 0.5 * (V + V.transpose());
+
+    const Vec vm0 = sm.vonMisesSolid(grid_, sol.U);
+    const Vec sigma = sm.relaxedStress(rho, vm0);
+    const double sigPN = sm.pNorm(sigma);
+    sol.J = sigPN;
+
+    const int nE = grid_.nElems();
+    const double vmFloor = 1e-12;  // guard vm0 ~ 0 in dvm0/du = (1/vm0) S0^T V s
+
+    // Per-element dJ/dsigma_e = sigma_PN^(1-P) sigma_e^(P-1).
+    Vec dJdsig(nE);
+    for (int e = 0; e < nE; ++e)
+        dJdsig(e) = std::pow(sigPN, 1.0 - P) * std::pow(sigma(e), P - 1.0);
+
+    // dJ/dU = sum_e (dJ/dsigma_e)(dsigma_e/du_e), scattered to global DOFs,
+    // with dsigma_e/du_e = rho_e^q (1/vm0_e) S0^T V s_e.
+    // Explicit term dJ/drho_i|exp = (dJ/dsigma_i) q rho_i^(q-1) vm0_i.
+    Vec dJdU = Vec::Zero(grid_.nDof());
+    sol.termExplicit = Vec::Zero(nE);
+    for (int ez = 0; ez < grid_.nelz(); ++ez)
+        for (int ey = 0; ey < grid_.nely(); ++ey)
+            for (int ex = 0; ex < grid_.nelx(); ++ex) {
+                const int eid = grid_.elemId(ex, ey, ez);
+                const auto dofs = grid_.elementDofs(ex, ey, ez);
+                Eigen::Matrix<double, 24, 1> ue;
+                for (int a = 0; a < 24; ++a)
+                    ue(a) = sol.U(dofs[static_cast<size_t>(a)]);
+
+                const double r = clamp01(rho(eid));
+                const double rq = std::pow(r, q);
+
+                if (vm0(eid) > vmFloor) {
+                    const Eigen::Matrix<double, 6, 1> s = S0 * ue;
+                    const Eigen::Matrix<double, 24, 1> dsig_du =
+                        (rq / vm0(eid)) * (S0.transpose() * (Vsym * s));
+                    const double w = dJdsig(eid);
+                    for (int a = 0; a < 24; ++a)
+                        dJdU(dofs[static_cast<size_t>(a)]) += w * dsig_du(a);
+                }
+
+                // Explicit term: rho^(q-1) can diverge for q<1, floor rho (LL-008).
+                const double rEps = std::max(r, 1e-9);
+                sol.termExplicit(eid) =
+                    dJdsig(eid) * q * std::pow(rEps, q - 1.0) * vm0(eid);
             }
 
+    // (1) Elastic adjoint with the stress RHS: K_e lam_e = -dJ/dU.
+    const Vec E = youngModulus(rho);
+    const Vec k = conductivity(rho);
+    const Vec lamE = fem_.solve(E, -dJdU);
+
+    // (2) Thermal adjoint: K_t lam_t = G^T lam_e (same coupling as compliance).
+    const Vec lamT = solveThermal(k, thermalAdjointRhs(E, lamE));
+
+    // (3) Three shared rho-derivative terms with the new adjoints.
+    hereditaryGradient(rho, sol.U, sol.T, lamE, lamT, sol.termElastic,
+                       sol.termThermalLoad, sol.termConduction);
+
+    sol.grad = sol.termExplicit + sol.termElastic + sol.termThermalLoad +
+               sol.termConduction;
     return sol;
 }
 
