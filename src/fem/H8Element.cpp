@@ -229,4 +229,48 @@ H8Element::Mat24x8 H8Element::thermalCoupling(double nu) {
     return Cth;
 }
 
+H8Element::Mat6x24 H8Element::stressMatrix(double nu) {
+    const auto nn = nodeNat();
+    const Eigen::Matrix<double, 6, 6> D = elasticD(nu);
+    double X[8][3];
+    for (int a = 0; a < 8; ++a) {
+        X[a][0] = (nn[static_cast<size_t>(a)].xi + 1.0) * 0.5;
+        X[a][1] = (nn[static_cast<size_t>(a)].eta + 1.0) * 0.5;
+        X[a][2] = (nn[static_cast<size_t>(a)].zeta + 1.0) * 0.5;
+    }
+    // B at the centroid (xi=eta=zeta=0).
+    double dN[8][3];
+    shapeDeriv(0.0, 0.0, 0.0, nn, dN);
+    Eigen::Matrix3d J = Eigen::Matrix3d::Zero();
+    for (int a = 0; a < 8; ++a)
+        for (int r = 0; r < 3; ++r)
+            for (int c = 0; c < 3; ++c) J(r, c) += X[a][r] * dN[a][c];
+    const Eigen::Matrix3d Jinv = J.inverse();
+    double dNdx[8][3];
+    for (int a = 0; a < 8; ++a)
+        for (int i = 0; i < 3; ++i) {
+            double s = 0.0;
+            for (int c = 0; c < 3; ++c) s += Jinv(c, i) * dN[a][c];
+            dNdx[a][i] = s;
+        }
+    Mat6x24 B = Mat6x24::Zero();
+    for (int a = 0; a < 8; ++a) {
+        const double bx = dNdx[a][0], by = dNdx[a][1], bz = dNdx[a][2];
+        const int cx = 3 * a, cy = 3 * a + 1, cz = 3 * a + 2;
+        B(0, cx) = bx; B(1, cy) = by; B(2, cz) = bz;
+        B(3, cx) = by; B(3, cy) = bx;
+        B(4, cy) = bz; B(4, cz) = by;
+        B(5, cx) = bz; B(5, cz) = bx;
+    }
+    return D * B;
+}
+
+H8Element::Mat6 H8Element::vonMisesForm() {
+    Mat6 V = Mat6::Zero();
+    V(0, 0) = V(1, 1) = V(2, 2) = 1.0;
+    V(0, 1) = V(1, 0) = V(0, 2) = V(2, 0) = V(1, 2) = V(2, 1) = -0.5;
+    V(3, 3) = V(4, 4) = V(5, 5) = 3.0;
+    return V;
+}
+
 } // namespace topopt

@@ -26,6 +26,16 @@ public:
     // thermo-elastic coupling; alpha and E_e are applied at use.
     using Mat24x8 = Eigen::Matrix<double, 24, 8>;
     static Mat24x8 thermalCoupling(double nu);
+
+    // Element "stress matrix" S0 (6x24) = D0 * B at the element centroid, for
+    // E=1. Solid stress (Voigt [sx,sy,sz,txy,tyz,tzx]) at the centre from the
+    // element nodal displacements: s_e = S0 * u_e. Used for von Mises.
+    using Mat6x24 = Eigen::Matrix<double, 6, 24>;
+    static Mat6x24 stressMatrix(double nu);
+
+    // Von Mises quadratic form V (6x6): sigma_vM^2 = s^T V s.
+    using Mat6 = Eigen::Matrix<double, 6, 6>;
+    static Mat6 vonMisesForm();
 };
 
 } // namespace topopt
