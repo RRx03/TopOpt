@@ -133,6 +133,24 @@ LL-004 car LL-002/003 étaient déjà pris.)*
 ---
 
 ## Catégorie : Erreurs de validation
+
+### LL-009 : Plancher d'arrondi en validation par différences finies (Phase 4, 2026-06-28)
+- **Symptôme** : un gradient adjoint CORRECT plafonne à ~1e-5 en erreur relative DF
+  sur quelques éléments, alors que l'accord absolu est ~1e-9 partout
+- **Cause** : la DF a un plancher d'arrondi `≈ machine_eps · |J| / ε`. Sur les
+  entrées à gradient quasi-nul, l'erreur *relative* (= abs/|grad_petit|) explose
+  même si l'adjoint est exact. Ce n'est PAS un bug d'adjoint
+- **Diagnostic décisif** : faire varier ε. Si l'erreur **décroît** quand ε
+  **grandit** → arrondi pur (l'adjoint est bon). Si elle **augmente** → vraie
+  erreur de troncature ou adjoint faux. (Sweep observé : ε 1e-6→1.6e-5,
+  1e-4→1.6e-7, 1e-3→3e-8 = signature d'arrondi)
+- **Leçon** : (1) juger un gate DF d'abord sur l'**accord absolu / nb de chiffres
+  significatifs** des éléments bien conditionnés (preuve indépendante du stencil),
+  pas seulement sur le max d'erreur relative ; (2) utiliser un stencil central
+  d'ordre supérieur (4ᵉ) et un ε adapté ; (3) un adjoint correct concorde à
+  7-11 chiffres sur les éléments à gradient non négligeable — c'est ça la preuve
+- **Vérification** : sweep en ε + inspection par élément (table adjoint vs DF)
+
 *(À enrichir)*
 
 ---
