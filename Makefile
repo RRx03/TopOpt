@@ -47,10 +47,11 @@ TEST_CG    := $(BUILD)/test_cg_gpu
 TEST_MBB   := $(BUILD)/test_mbb3d
 TEST_MG    := $(BUILD)/test_multigrid
 TEST_TH    := $(BUILD)/test_thermal
+TEST_TE    := $(BUILD)/test_thermoelastic
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
-all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TOPOPT) $(METALLIB)
+all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TOPOPT) $(METALLIB)
 
 # --- link rules ---
 $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
@@ -74,11 +75,15 @@ $(TEST_MG): $(CPU_OBJS) $(OBJ)/test_multigrid.o
 $(TEST_TH): $(CPU_OBJS) $(GPU_OBJS) $(OBJ)/test_thermal.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
+$(TEST_TE): $(CPU_OBJS) $(GPU_OBJS) $(OBJ)/test_thermoelastic.o
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
 # Full GPU test suite (needs the metallib).
 test: all
 	./$(TEST_FEM)
 	./$(TEST_MG)
 	./$(TEST_TH)
+	./$(TEST_TE)
 	./$(TEST_CG)
 	./$(TEST_HELLO)
 	./$(TEST_MBB)
@@ -110,4 +115,4 @@ $(METALLIB): $(METAL_AIR)
 
 clean:
 	rm -rf $(OBJ) $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) \
-	       $(TEST_TH) $(TOPOPT) $(METAL_AIR) $(METALLIB)
+	       $(TEST_TH) $(TEST_TE) $(TOPOPT) $(METAL_AIR) $(METALLIB)

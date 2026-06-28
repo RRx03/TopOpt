@@ -19,6 +19,13 @@ public:
     // Helmholtz diffusion (∫ ∇N·∇N) and mass (∫ N N) matrices on the unit cube.
     static Mat8 diffusion();
     static Mat8 mass();
+
+    // Thermal coupling matrix Cth (24x8) for E=1, isotropic expansion:
+    //   f_thermal_e = E_e * alpha * Cth * (T_nodal - T_ref)
+    // with Cth = ∫ B^T D m N dV, m = [1,1,1,0,0,0]^T (Voigt). Weak (one-way)
+    // thermo-elastic coupling; alpha and E_e are applied at use.
+    using Mat24x8 = Eigen::Matrix<double, 24, 8>;
+    static Mat24x8 thermalCoupling(double nu);
 };
 
 } // namespace topopt

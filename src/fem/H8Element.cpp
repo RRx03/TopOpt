@@ -172,4 +172,61 @@ H8Element::Mat8 H8Element::mass() {
     return Me;
 }
 
+H8Element::Mat24x8 H8Element::thermalCoupling(double nu) {
+    const auto nn = nodeNat();
+    const Eigen::Matrix<double, 6, 6> D = elasticD(nu);
+    Eigen::Matrix<double, 6, 1> m;
+    m << 1, 1, 1, 0, 0, 0;  // isotropic expansion (Voigt)
+    const Eigen::Matrix<double, 6, 1> Dm = D * m;
+
+    double X[8][3];
+    for (int a = 0; a < 8; ++a) {
+        X[a][0] = (nn[static_cast<size_t>(a)].xi + 1.0) * 0.5;
+        X[a][1] = (nn[static_cast<size_t>(a)].eta + 1.0) * 0.5;
+        X[a][2] = (nn[static_cast<size_t>(a)].zeta + 1.0) * 0.5;
+    }
+    const double g = 1.0 / std::sqrt(3.0);
+    const double gp[2] = {-g, g};
+
+    Mat24x8 Cth = Mat24x8::Zero();
+    for (int ig = 0; ig < 2; ++ig)
+        for (int jg = 0; jg < 2; ++jg)
+            for (int kg = 0; kg < 2; ++kg) {
+                double dN[8][3], N[8];
+                shapeDeriv(gp[ig], gp[jg], gp[kg], nn, dN);
+                shapeVal(gp[ig], gp[jg], gp[kg], nn, N);
+
+                Eigen::Matrix3d J = Eigen::Matrix3d::Zero();
+                for (int a = 0; a < 8; ++a)
+                    for (int r = 0; r < 3; ++r)
+                        for (int c = 0; c < 3; ++c)
+                            J(r, c) += X[a][r] * dN[a][c];
+                const double detJ = J.determinant();
+                const Eigen::Matrix3d Jinv = J.inverse();
+
+                double dNdx[8][3];
+                for (int a = 0; a < 8; ++a)
+                    for (int i = 0; i < 3; ++i) {
+                        double s = 0.0;
+                        for (int c = 0; c < 3; ++c) s += Jinv(c, i) * dN[a][c];
+                        dNdx[a][i] = s;
+                    }
+
+                Eigen::Matrix<double, 6, 24> B = Eigen::Matrix<double, 6, 24>::Zero();
+                for (int a = 0; a < 8; ++a) {
+                    const double bx = dNdx[a][0], by = dNdx[a][1], bz = dNdx[a][2];
+                    const int cx = 3 * a, cy = 3 * a + 1, cz = 3 * a + 2;
+                    B(0, cx) = bx; B(1, cy) = by; B(2, cz) = bz;
+                    B(3, cx) = by; B(3, cy) = bx;
+                    B(4, cy) = bz; B(4, cz) = by;
+                    B(5, cx) = bz; B(5, cz) = bx;
+                }
+                // (B^T D m) is 24x1 ; outer with N (1x8) -> 24x8.
+                const Eigen::Matrix<double, 24, 1> BtDm = B.transpose() * Dm;
+                Eigen::Map<const Eigen::Matrix<double, 8, 1>> Nv(N);
+                Cth += (BtDm * Nv.transpose()) * detJ;
+            }
+    return Cth;
+}
+
 } // namespace topopt
