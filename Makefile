@@ -20,6 +20,8 @@ SHADERS := shaders
 # CPU FEM core (Eigen only, no Metal).
 CPU_SRCS := $(SRC)/fem/H8Element.cpp $(SRC)/fem/FEM3D.cpp \
             $(SRC)/topopt/SIMP3D.cpp $(SRC)/topopt/GridTransfer.cpp
+# Discrete thermo-elastic adjoint (Eigen only, no Metal) — Phase 4 validation.
+ADJ_SRCS := $(SRC)/adjoint/ThermoElasticAdjoint.cpp
 # Metal context core (device/queue/library + single metal-cpp impl TU).
 GPU_CORE_SRCS := $(SRC)/gpu/MetalContext.cpp $(SRC)/gpu/metal_impl.cpp
 # GPU solvers (matrix-free CG + Helmholtz filter), depend on CPU FEM core.
@@ -30,6 +32,7 @@ GPU_SOLVER_SRCS := $(SRC)/gpu/CGSolver3D.cpp $(SRC)/filter/Helmholtz3D.cpp \
 IO_SRCS  := $(SRC)/io/STLExporter.cpp
 
 CPU_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(CPU_SRCS))
+ADJ_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(ADJ_SRCS))
 GPU_CORE_OBJS := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(GPU_CORE_SRCS))
 GPU_OBJS      := $(GPU_CORE_OBJS) \
                  $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(GPU_SOLVER_SRCS))
@@ -48,10 +51,11 @@ TEST_MBB   := $(BUILD)/test_mbb3d
 TEST_MG    := $(BUILD)/test_multigrid
 TEST_TH    := $(BUILD)/test_thermal
 TEST_TE    := $(BUILD)/test_thermoelastic
+TEST_ADJ   := $(BUILD)/test_adjoint_fd
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
-all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TOPOPT) $(METALLIB)
+all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TOPOPT) $(METALLIB)
 
 # --- link rules ---
 $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
@@ -59,6 +63,10 @@ $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
 
 $(TEST_FEM): $(CPU_OBJS) $(OBJ)/test_fem3d.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+# CPU-pure (Eigen only, no Metal frameworks): the Phase 4 adjoint gate.
+$(TEST_ADJ): $(CPU_OBJS) $(ADJ_OBJS) $(OBJ)/test_adjoint_fd.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
 
 $(TEST_CG): $(CPU_OBJS) $(GPU_OBJS) $(OBJ)/test_cg_gpu.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
@@ -82,6 +90,7 @@ $(TEST_TE): $(CPU_OBJS) $(GPU_OBJS) $(OBJ)/test_thermoelastic.o
 test: all
 	./$(TEST_FEM)
 	./$(TEST_MG)
+	./$(TEST_ADJ)
 	./$(TEST_TH)
 	./$(TEST_TE)
 	./$(TEST_CG)
@@ -89,9 +98,10 @@ test: all
 	./$(TEST_MBB)
 
 # CPU-only checks (no GPU / no metallib needed).
-test_cpu: $(TEST_FEM) $(TEST_MG)
+test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ)
 	./$(TEST_FEM)
 	./$(TEST_MG)
+	./$(TEST_ADJ)
 
 run: $(TOPOPT) $(METALLIB)
 	./$(TOPOPT) mbb
@@ -115,4 +125,4 @@ $(METALLIB): $(METAL_AIR)
 
 clean:
 	rm -rf $(OBJ) $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) \
-	       $(TEST_TH) $(TEST_TE) $(TOPOPT) $(METAL_AIR) $(METALLIB)
+	       $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TOPOPT) $(METAL_AIR) $(METALLIB)
