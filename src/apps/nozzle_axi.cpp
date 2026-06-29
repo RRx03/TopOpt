@@ -187,7 +187,29 @@ int main() {
                 mThroat, mEnd, mThroat / mEnd,
                 (mThroat > mEnd * 1.1) ? "THICKER AT THROAT (expected)"
                                        : "no clear throat reinforcement");
-    std::printf("wrote output/nozzle_axi.pgm (%dx%d, rows=z cols=r)\n", nr, nz);
+    std::printf("wrote output/nozzle_axi.pgm (%dx%d, rows=z cols=r; WHITE=material)\n",
+                nr, nz);
+
+    // Unambiguous full-diameter cross-section: x in [-b,b]. Hollow bore (r<a) in
+    // black, the two walls (a<=|x|<=b) in their density. Reads as a tube section:
+    // black bore in the middle, white walls on both sides, whiter at the throat.
+    {
+        const int boreHalf = static_cast<int>(std::lround(a / grid.hr()));
+        const int Wf = nr + 2 * boreHalf + nr;
+        std::ofstream cs("output/nozzle_crosssection.pgm", std::ios::binary);
+        cs << "P5\n" << Wf << " " << nz << "\n255\n";
+        for (int ej = nz - 1; ej >= 0; --ej) {
+            auto px = [&](int ei) {
+                return static_cast<char>(std::lround(
+                    255.0 * std::clamp(rhoPhys(grid.elemId(ei, ej)), 0.0, 1.0)));
+            };
+            for (int ei = nr - 1; ei >= 0; --ei) cs.put(px(ei));  // left wall (b->a)
+            for (int k = 0; k < 2 * boreHalf; ++k) cs.put(char(0)); // bore (void)
+            for (int ei = 0; ei < nr; ++ei) cs.put(px(ei));        // right wall (a->b)
+        }
+        std::printf("wrote output/nozzle_crosssection.pgm (%dx%d, full diameter,"
+                    " black bore + white walls)\n", Wf, nz);
+    }
 
     // --- Revolve the axisymmetric design into a 3D STL (watertight voxels) ---
     // Sample the (r,z) density on a Cartesian voxel grid via r = sqrt(x^2+y^2),
@@ -213,7 +235,9 @@ int main() {
                     const double rr = std::sqrt(x * x + y * y);
                     rho3(g3.elemId(ix, jy, kz)) = axiCell(rr, kz);
                 }
-        STLExporter::writeVoxelSurface("output/nozzle3d.stl", rho3, g3, 0.5);
+        // Threshold below the throat mean so the reinforced region renders as a
+        // connected solid (the field peaks ~0.45; 0.5 would drop most of it).
+        STLExporter::writeVoxelSurface("output/nozzle3d.stl", rho3, g3, 0.3);
     }
     return 0;
 }
