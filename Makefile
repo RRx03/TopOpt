@@ -62,6 +62,7 @@ TEST_ADJ   := $(BUILD)/test_adjoint_fd
 TEST_STR   := $(BUILD)/test_stress
 TEST_SADJ  := $(BUILD)/test_stress_adjoint_fd
 TEST_MMA   := $(BUILD)/test_mma
+NOZZLE_AXI := $(BUILD)/nozzle_axi
 TEST_AXI   := $(BUILD)/test_axisymmetric
 TEST_AXISADJ := $(BUILD)/test_axi_stress_adjoint_fd
 TOPOPT     := $(BUILD)/topopt
@@ -97,6 +98,10 @@ $(TEST_AXI): $(AXI_OBJS) $(OBJ)/test_axisymmetric.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 # CPU-pure: axisymmetric stress p-norm adjoint gate (Phase 4 step 7a) — FD oracle.
+# CPU-pure axisymmetric structural nozzle TO demo (step 7b).
+$(NOZZLE_AXI): $(CPU_OBJS) $(AXI_OBJS) $(AXIADJ_OBJS) $(OBJ)/apps/nozzle_axi.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 $(TEST_AXISADJ): $(AXI_OBJS) $(AXIADJ_OBJS) $(OBJ)/test_axi_stress_adjoint_fd.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
