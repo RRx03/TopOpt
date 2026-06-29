@@ -15,6 +15,8 @@
 
 #include "adjoint/AxiStressAdjoint.hpp"
 #include "core/Grid2DAxi.hpp"
+#include "core/Grid3D.hpp"
+#include "io/STLExporter.hpp"
 #include "topopt/MMAOptimizer.hpp"
 #include "topopt/StressModelAxi.hpp"
 
@@ -186,5 +188,32 @@ int main() {
                 (mThroat > mEnd * 1.1) ? "THICKER AT THROAT (expected)"
                                        : "no clear throat reinforcement");
     std::printf("wrote output/nozzle_axi.pgm (%dx%d, rows=z cols=r)\n", nr, nz);
+
+    // --- Revolve the axisymmetric design into a 3D STL (watertight voxels) ---
+    // Sample the (r,z) density on a Cartesian voxel grid via r = sqrt(x^2+y^2),
+    // then reuse the validated voxel-surface STL exporter (Phase 2).
+    {
+        const int nxy = 64;                 // voxels across the diameter
+        const int nz3 = nz;                 // keep axial resolution
+        Grid3D g3(nxy, nxy, nz3);
+        Vec rho3(g3.nElems());
+        const double hxy = 2.0 * b / nxy;   // domain [-b,b] in x,y
+        auto axiCell = [&](double rr, int kz) -> double {
+            if (rr < a || rr >= b) return 0.0;
+            int ir = static_cast<int>((rr - a) / grid.hr());
+            ir = std::clamp(ir, 0, nr - 1);
+            int jz = std::clamp(kz, 0, nz - 1);
+            return rhoPhys(grid.elemId(ir, jz));
+        };
+        for (int kz = 0; kz < nz3; ++kz)
+            for (int jy = 0; jy < nxy; ++jy)
+                for (int ix = 0; ix < nxy; ++ix) {
+                    const double x = -b + (ix + 0.5) * hxy;
+                    const double y = -b + (jy + 0.5) * hxy;
+                    const double rr = std::sqrt(x * x + y * y);
+                    rho3(g3.elemId(ix, jy, kz)) = axiCell(rr, kz);
+                }
+        STLExporter::writeVoxelSurface("output/nozzle3d.stl", rho3, g3, 0.5);
+    }
     return 0;
 }

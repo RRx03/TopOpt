@@ -98,8 +98,8 @@ $(TEST_AXI): $(AXI_OBJS) $(OBJ)/test_axisymmetric.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 # CPU-pure: axisymmetric stress p-norm adjoint gate (Phase 4 step 7a) — FD oracle.
-# CPU-pure axisymmetric structural nozzle TO demo (step 7b).
-$(NOZZLE_AXI): $(CPU_OBJS) $(AXI_OBJS) $(AXIADJ_OBJS) $(OBJ)/apps/nozzle_axi.o
+# CPU-pure axisymmetric structural nozzle TO demo (step 7b) + revolved STL.
+$(NOZZLE_AXI): $(CPU_OBJS) $(AXI_OBJS) $(AXIADJ_OBJS) $(IO_OBJS) $(OBJ)/apps/nozzle_axi.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 $(TEST_AXISADJ): $(AXI_OBJS) $(AXIADJ_OBJS) $(OBJ)/test_axi_stress_adjoint_fd.o
