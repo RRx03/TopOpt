@@ -17,6 +17,7 @@
 #include "core/Grid2DAxi.hpp"
 #include "core/Grid3D.hpp"
 #include "io/STLExporter.hpp"
+#include "io/VTKExporter.hpp"
 #include "topopt/MMAOptimizer.hpp"
 #include "topopt/StressModelAxi.hpp"
 
@@ -238,6 +239,27 @@ int main() {
         // Threshold below the throat mean so the reinforced region renders as a
         // connected solid (the field peaks ~0.45; 0.5 would drop most of it).
         STLExporter::writeVoxelSurface("output/nozzle3d.stl", rho3, g3, 0.3);
+
+        // VTK field export (density + von Mises) revolved to 3D -> ParaView.
+        const auto ssFinal = adj.stressPNormGrad(rhoPhys, sm);
+        const Vec vm = sm.vonMisesSolid(grid, ssFinal.U);  // per (r,z) element
+        Vec vm3(g3.nElems());
+        for (int kz = 0; kz < nz3; ++kz)
+            for (int jy = 0; jy < nxy; ++jy)
+                for (int ix = 0; ix < nxy; ++ix) {
+                    const double x = -b + (ix + 0.5) * hxy;
+                    const double y = -b + (jy + 0.5) * hxy;
+                    const double rr = std::sqrt(x * x + y * y);
+                    double v = 0.0;
+                    if (rr >= a && rr < b) {
+                        int ir = std::clamp(int((rr - a) / grid.hr()), 0, nr - 1);
+                        v = vm(grid.elemId(ir, std::clamp(kz, 0, nz - 1)));
+                    }
+                    vm3(g3.elemId(ix, jy, kz)) = v;
+                }
+        VTKExporter::writeImageData(
+            "output/nozzle3d.vti", g3,
+            {{"density", &rho3}, {"vonMises", &vm3}});
     }
     return 0;
 }

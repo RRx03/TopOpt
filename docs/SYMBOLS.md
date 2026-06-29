@@ -22,6 +22,7 @@ Last updated: 2026-06-28
 - `topopt::gpu::MetalContext` — src/gpu/MetalContext.hpp — device/queue/library/pipeline
 - `topopt::gpu::CGSolver3D` — src/gpu/CGSolver3D.hpp — CG matrix-free Jacobi GPU (élasticité)
 - `topopt::STLExporter` — src/io/STLExporter.hpp — surface voxels → STL binaire
+- `topopt::VTKExporter` — src/io/VTKExporter.hpp — export .vti (champs cellule) pour ParaView
 
 ## Classes / Structs (Phase 3)
 - `topopt::Grid3DMultiLevel` — src/core/Grid3DMultiLevel.hpp — hiérarchie ×2, cell size mm/niveau
