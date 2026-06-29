@@ -126,3 +126,13 @@
   explicite ∂J/∂ρ.
 - **Conséquences** : un seul code d'adjoint à maintenir/valider ; les futurs
   objectifs (T_max, masse) s'y ajoutent de même. Validation CPU double (oracle).
+
+## ADR-015 : Optimiseur MMA (Svanberg 1987) par méthode duale
+- **Date** : 2026-06-29
+- **Contexte** : l'OC ne gère qu'une contrainte (volume). Phase 4+ a plusieurs
+  contraintes (von Mises p-norm, T_max) → besoin d'un optimiseur multi-contraintes.
+- **Décision** : MMA standard (mmasub), sous-problème séparable convexe résolu par
+  **méthode duale** (bisection si m=1, Newton projeté si m≥2). Réutilisable n var/m contr.
+- **Conséquences** : optimum analytique atteint à 6.4e-14, compliance MBB à 0.037 %
+  de l'OC. Moteur d'optimisation pour le cas tuyère et au-delà (P5). GCMMA en
+  fallback documenté si oscillations futures.

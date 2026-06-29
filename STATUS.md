@@ -11,10 +11,13 @@
    (von Mises uniaxial 2.4e-15, relaxation ρ→0). **GATE sensibilité stress p-norm
    validé DF — 1.62e-7** (adjoint étendu, 4 termes actifs). Compliance toujours verte.
 
+5. ✅ **MMA** (`MMAOptimizer`, Svanberg 1987, sous-problème dual) — oracle analytique
+   6.4e-14, cross-check OC 0.037 %, chemin m=2 (Newton dual) OK.
+
 ## Next up
-5. **MMA** (remplace OC) — multi-contraintes (masse min sous σ_PN ≤ σ_yield, T_max).
-6. Géométrie 2D axisymétrique (singularité r=0).
-7. Cas tuyère 2D axi (pression + flux thermique) ; vérif épaississement au col.
+6. Géométrie 2D axisymétrique (r,z, facteurs 2πr, singularité r=0) — oracle Lamé.
+7. Cas tuyère 2D axi (pression + flux thermique) ; masse min sous σ_PN+T_max via MMA
+   + gradients adjoints validés ; vérif épaississement au col.
 
 ## Dette explicite
 - Adjoints (compliance + stress) validés en **CPU double** (oracle). Portage GPU

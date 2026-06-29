@@ -6,6 +6,7 @@ Last updated: 2026-06-28
 - `topopt::ThermoElasticCoupling` — src/physics/ThermoElasticCoupling.hpp — F_th = E_e·α·Cth·(T_e−Tref)
 - `topopt::StressModel` — src/topopt/StressModel.hpp — von Mises + qp-relaxation ρ^q + p-norm
 - `topopt::ThermoElasticAdjoint` — src/adjoint/ThermoElasticAdjoint.hpp — adjoint 2 blocs (compliance + stress p-norm), validé DF
+- `topopt::MMAOptimizer` — src/topopt/MMAOptimizer.hpp — MMA (Svanberg 1987), sous-problème dual, multi-contraintes
 - `H8Element::thermalCoupling/stressMatrix/vonMisesForm` — Cth 24×8, S0 6×24, V 6×6
 
 
