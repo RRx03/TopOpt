@@ -41,11 +41,16 @@ contraintes, MMA), cette phase est ingérable.
 
 ## ACQUIS PRÉREQUIS DE PHASE 4
 
-- [ ] Solveur thermique + couplage thermo-élastique validés
-- [ ] von Mises + p-norm + ε-relaxation opérationnels
-- [ ] **Adjoint deux blocs validé par DF** (la méthode, à généraliser)
-- [ ] MMA opérationnel et stable
-- [ ] Cas tuyère 2D axi produisant un design physiquement correct
+> ✅ **Phase 4 clôturée (2026-06-29).** Cf. `TopOptP4/PHASE_4_REPORT.md`,
+> `handoffs/PHASE_4_TO_5.md`. **Différé** : thermique-en-axisym + démo 3D
+> thermo-élastique complète (stack 3D validée). **Recommandation** : solder la
+> démo 3D thermo-élastique avant de greffer le bloc fluide.
+
+- [x] Solveur thermique + couplage thermo-élastique validés (8.9e-7 / 7.4e-6)
+- [x] von Mises + p-norm + qp-relaxation opérationnels
+- [x] **Adjoint deux blocs validé par DF** (1.6e-6 / stress 1.6e-7) — à généraliser au 3ᵉ bloc
+- [x] MMA opérationnel et stable (analytique 6.4e-14)
+- [x] Cas tuyère 2D axi structurel physiquement correct (col 3.11× plus épais)
 
 ## LIVRABLES SCIENTIFIQUES ATTENDUS
 
