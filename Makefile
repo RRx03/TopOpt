@@ -21,6 +21,8 @@ SHADERS := shaders
 CPU_SRCS := $(SRC)/fem/H8Element.cpp $(SRC)/fem/FEM3D.cpp \
             $(SRC)/topopt/SIMP3D.cpp $(SRC)/topopt/GridTransfer.cpp \
             $(SRC)/topopt/MMAOptimizer.cpp
+# 2D axisymmetric Q4 FEM (Eigen only, no Metal) — Phase 4 step 6.
+AXI_SRCS := $(SRC)/fem/AxiQ4Element.cpp $(SRC)/fem/FEM2DAxi.cpp
 # Discrete thermo-elastic adjoint (Eigen only, no Metal) — Phase 4 validation.
 ADJ_SRCS := $(SRC)/adjoint/ThermoElasticAdjoint.cpp
 # Metal context core (device/queue/library + single metal-cpp impl TU).
@@ -33,6 +35,7 @@ GPU_SOLVER_SRCS := $(SRC)/gpu/CGSolver3D.cpp $(SRC)/filter/Helmholtz3D.cpp \
 IO_SRCS  := $(SRC)/io/STLExporter.cpp
 
 CPU_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(CPU_SRCS))
+AXI_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(AXI_SRCS))
 ADJ_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(ADJ_SRCS))
 GPU_CORE_OBJS := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(GPU_CORE_SRCS))
 GPU_OBJS      := $(GPU_CORE_OBJS) \
@@ -56,10 +59,11 @@ TEST_ADJ   := $(BUILD)/test_adjoint_fd
 TEST_STR   := $(BUILD)/test_stress
 TEST_SADJ  := $(BUILD)/test_stress_adjoint_fd
 TEST_MMA   := $(BUILD)/test_mma
+TEST_AXI   := $(BUILD)/test_axisymmetric
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
-all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TOPOPT) $(METALLIB)
+all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TOPOPT) $(METALLIB)
 
 # --- link rules ---
 $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
@@ -82,6 +86,10 @@ $(TEST_SADJ): $(CPU_OBJS) $(ADJ_OBJS) $(OBJ)/test_stress_adjoint_fd.o
 
 # CPU-pure: MMA optimiser gate (Phase 4) — oracle A (analytic) + oracle B (vs OC).
 $(TEST_MMA): $(CPU_OBJS) $(OBJ)/test_mma.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# CPU-pure: 2D axisymmetric Q4 FEM gate (Phase 4) — Lame thick-cylinder oracle.
+$(TEST_AXI): $(AXI_OBJS) $(OBJ)/test_axisymmetric.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 $(TEST_CG): $(CPU_OBJS) $(GPU_OBJS) $(OBJ)/test_cg_gpu.o
@@ -110,6 +118,7 @@ test: all
 	./$(TEST_STR)
 	./$(TEST_SADJ)
 	./$(TEST_MMA)
+	./$(TEST_AXI)
 	./$(TEST_TH)
 	./$(TEST_TE)
 	./$(TEST_CG)
@@ -117,13 +126,14 @@ test: all
 	./$(TEST_MBB)
 
 # CPU-only checks (no GPU / no metallib needed).
-test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA)
+test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI)
 	./$(TEST_FEM)
 	./$(TEST_MG)
 	./$(TEST_ADJ)
 	./$(TEST_STR)
 	./$(TEST_SADJ)
 	./$(TEST_MMA)
+	./$(TEST_AXI)
 
 run: $(TOPOPT) $(METALLIB)
 	./$(TOPOPT) mbb
@@ -148,4 +158,4 @@ $(METALLIB): $(METAL_AIR)
 clean:
 	rm -rf $(OBJ) $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) \
 	       $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) \
-	       $(TEST_MMA) $(TOPOPT) $(METAL_AIR) $(METALLIB)
+	       $(TEST_MMA) $(TEST_AXI) $(TOPOPT) $(METAL_AIR) $(METALLIB)
