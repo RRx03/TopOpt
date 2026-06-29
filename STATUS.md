@@ -12,9 +12,12 @@
 5. ✅ MMA (`MMAOptimizer`, dual) — analytique 6.4e-14, OC 0.037 %
 6. ✅ FEM axisym (`Grid2DAxi`/`AxiQ4Element`/`FEM2DAxi`) — Lamé ordre 2
 7a ✅ Adjoint stress axisym (`AxiStressAdjoint`) — GATE 2.7e-9
-7b ✅ Tuyère axisym structurelle (`nozzle_axi`) — masse −53 %, **col 3.11× plus épais**
+7b ✅ Paroi axisym sous pression (`nozzle_axi`) — masse −53 %, renfort de paroi 3.11×
+   ⚠️ PAS une vraie tuyère : alésage CONSTANT (pas de col géométrique). Machinerie OK,
+   géométrie simplifiée. Vraie tuyère (alésage profilé + thermique) = différée.
 
 ## Différé (assumé — vers outil complet 3D+thermique, cf. PHASE_4_REPORT §7-8)
+- **Vraie tuyère** : alésage profilé convergent-divergent (a(z)) — l'actuel a un alésage droit.
 - Thermique en axisymétrique (+ gate DF thermo-axi).
 - Démo 3D thermo-élastique complète (stack 3D validée, ZÉRO gate manquant).
 - Portage GPU des adjoints (float32, à re-valider contre CPU double).

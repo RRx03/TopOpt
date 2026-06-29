@@ -34,21 +34,28 @@ singularity** (ε/qp-relaxation) et un optimiseur multi-contraintes (**MMA**).
 
 Tout en C++23, `make` 0 warning, suite `make test_cpu` verte.
 
-## 3. Résultat démonstrateur — tuyère axisymétrique structurelle
+## 3. Résultat démonstrateur — paroi axisymétrique sous pression (structurel)
 
-Paroi annulaire (a=1, b=1.6, H=4), **pression interne piquée au col** (bosse
-gaussienne à mi-hauteur), plane strain. **Masse minimisée sous von Mises p-norm
-≤ σ_lim**, pilotée par MMA, sensibilité par `AxiStressAdjoint` (gate 2.7e-9).
+> **⚠️ Honnêteté : ce N'EST PAS une vraie tuyère.** Domaine = paroi annulaire à
+> **alésage CONSTANT** (a=1, b=1.6, H=4) ; l'alésage (r<a) n'est pas modélisé.
+> Le « col » est seulement l'endroit où la pression interne est piquée (bosse
+> gaussienne à mi-hauteur) — **pas un rétrécissement géométrique du trou**. On
+> démontre donc l'**optimisation d'épaisseur/distribution de matière de la paroi**,
+> pas le contour d'une tuyère convergente-divergente. Cf. §7 (différé).
+
+Plane strain. **Masse minimisée sous von Mises p-norm ≤ σ_lim**, pilotée par MMA,
+sensibilité par `AxiStressAdjoint` (gate 2.7e-9).
 
 | Métrique | Valeur |
 |---|---|
 | Masse (normalisée) | 0.50 → **0.235** (−53 %) |
 | Contrainte stress | active et satisfaite (σ_PN ≈ σ_lim, g = −2e-4) |
-| Densité moyenne col vs extrémités | 0.453 / 0.146 = **3.11×** |
-| **Verdict physique** | **plus épais au col** (attendu : pic de pression → pic de stress → matière conservée) |
+| Distribution radiale | matière à la **paroi interne** (r=a, pic de Lamé), creusée vers l'extérieur |
+| Renfort axial | plus de matière à mi-hauteur (où la pression est piquée), ratio 3.11× |
+| **Verdict** | **machinerie d'optim de paroi fonctionnelle et physiquement correcte** — mais sur une géométrie qui n'est pas une tuyère |
 
-Sortie : `output/nozzle_axi.png` (champ de densité, lignes = z, colonnes = r).
-*Démonstrateur STRUCTUREL : pas de thermique (différée, §7).*
+Sorties : `output/nozzle_crosssection.png` (coupe pleine, axe r=0 marqué en gris,
+alésage noir, parois blanches), `output/nozzle3d.vti` (densité + von Mises, ParaView).
 
 ## 4. Choix de conception et raisons
 
@@ -107,7 +114,8 @@ réutilise l'adjoint stress *réimplémenté en axisym* (7a). L'unification comp
 
 | Item | Raison | Pour la suite |
 |---|---|---|
-| **Thermique en axisymétrique** | démonstrateur structurel suffisant pour cette étape | porter ThermalSolver+couplage+adjoint sur Grid2DAxi (+ gate DF axisym thermo) |
+| **Vraie géométrie de tuyère (alésage profilé convergent-divergent)** | le démonstrateur actuel a un alésage CONSTANT (pas un vrai col) | maillage body-fitted a(z) OU domaine de design étendu vers l'axe que l'optimiseur creuse (+ traiter r=0). C'est ce qui manque pour une tuyère au sens propre |
+| **Thermique en axisymétrique** | démonstrateur structurel seul | porter ThermalSolver+couplage+adjoint sur Grid2DAxi (+ gate DF axisym thermo) |
 | **Démo 3D thermo-élastique complète** | la stack 3D est validée mais le cas n'est pas assemblé | assembler un cas 3D pressurisé+chauffé, mass-min sous von Mises+T_max via MMA (zéro nouveau gate — tout est validé) |
 | **Portage GPU des adjoints** | adjoints validés en CPU double (oracle) | matrix-free float32, re-validé contre le chemin CPU |
 | **Unification des 2 pistes (3D/axi)** | ADR-016 | architecture commune élément/adjoint à terme |
