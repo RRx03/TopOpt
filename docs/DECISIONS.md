@@ -136,3 +136,13 @@
 - **Conséquences** : optimum analytique atteint à 6.4e-14, compliance MBB à 0.037 %
   de l'OC. Moteur d'optimisation pour le cas tuyère et au-delà (P5). GCMMA en
   fallback documenté si oscillations futures.
+
+## ADR-016 : FEM axisymétrique = piste 2D séparée (Grid2DAxi/FEM2DAxi)
+- **Date** : 2026-06-29
+- **Contexte** : la tuyère est 2D axisymétrique, mais thermique/couplage/stress/
+  adjoint ont été bâtis et validés sur la piste 3D (Grid3D/FEM3D).
+- **Décision** : l'axisymétrique est une piste FEM distincte (Q4 r,z), validée Lamé.
+- **Conséquences** : le cas tuyère COMPLET (thermo-élastique + stress + adjoint en
+  axisym) requiert de porter thermique/couplage/stress/adjoint sur Grid2DAxi — un
+  travail à part entière (ré-dérivation + nouveau gate DF axisym). Seam documenté ;
+  portée de l'étape 7 à arbitrer (cf. STATUS).

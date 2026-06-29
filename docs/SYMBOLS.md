@@ -7,6 +7,9 @@ Last updated: 2026-06-28
 - `topopt::StressModel` — src/topopt/StressModel.hpp — von Mises + qp-relaxation ρ^q + p-norm
 - `topopt::ThermoElasticAdjoint` — src/adjoint/ThermoElasticAdjoint.hpp — adjoint 2 blocs (compliance + stress p-norm), validé DF
 - `topopt::MMAOptimizer` — src/topopt/MMAOptimizer.hpp — MMA (Svanberg 1987), sous-problème dual, multi-contraintes
+- `topopt::Grid2DAxi` — src/core/Grid2DAxi.hpp — grille Q4 axisymétrique (r,z), 2 DOF/nœud
+- `topopt::AxiQ4Element` — src/fem/AxiQ4Element.hpp — élément Q4 axisym (ε_θ=u_r/r, D 4×4)
+- `topopt::FEM2DAxi` — src/fem/FEM2DAxi.hpp — solveur axisym CPU (LDLT) + pression interne + contrainte
 - `H8Element::thermalCoupling/stressMatrix/vonMisesForm` — Cth 24×8, S0 6×24, V 6×6
 
 
