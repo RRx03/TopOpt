@@ -34,7 +34,8 @@ TopOptP4/src/  (ajouts Phase 4)
   **seam 3D/axisym** (deux pistes FEM, à unifier).
 
 ### Différé (assumé, vers l'outil complet 3D+thermique)
-- Thermique en axisym ; démo 3D thermo-élastique complète (stack 3D validée, zéro
+- **Vraie tuyère** (alésage profilé, l'actuel est à alésage constant) ; thermique en
+  axisym ; démo 3D thermo-élastique complète (stack 3D validée, zéro
   gate manquant) ; portage GPU des adjoints (float32, à re-valider). Prompts
   d'approfondissement dans `PHASE_4_REPORT.md` §8.
 
