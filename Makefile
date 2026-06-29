@@ -19,7 +19,8 @@ SHADERS := shaders
 
 # CPU FEM core (Eigen only, no Metal).
 CPU_SRCS := $(SRC)/fem/H8Element.cpp $(SRC)/fem/FEM3D.cpp \
-            $(SRC)/topopt/SIMP3D.cpp $(SRC)/topopt/GridTransfer.cpp
+            $(SRC)/topopt/SIMP3D.cpp $(SRC)/topopt/GridTransfer.cpp \
+            $(SRC)/topopt/MMAOptimizer.cpp
 # Discrete thermo-elastic adjoint (Eigen only, no Metal) — Phase 4 validation.
 ADJ_SRCS := $(SRC)/adjoint/ThermoElasticAdjoint.cpp
 # Metal context core (device/queue/library + single metal-cpp impl TU).
@@ -54,10 +55,11 @@ TEST_TE    := $(BUILD)/test_thermoelastic
 TEST_ADJ   := $(BUILD)/test_adjoint_fd
 TEST_STR   := $(BUILD)/test_stress
 TEST_SADJ  := $(BUILD)/test_stress_adjoint_fd
+TEST_MMA   := $(BUILD)/test_mma
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
-all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TOPOPT) $(METALLIB)
+all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TOPOPT) $(METALLIB)
 
 # --- link rules ---
 $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
@@ -76,6 +78,10 @@ $(TEST_STR): $(CPU_OBJS) $(OBJ)/test_stress.o
 
 # CPU-pure: stress p-norm adjoint gate (Phase 4, second gate).
 $(TEST_SADJ): $(CPU_OBJS) $(ADJ_OBJS) $(OBJ)/test_stress_adjoint_fd.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# CPU-pure: MMA optimiser gate (Phase 4) — oracle A (analytic) + oracle B (vs OC).
+$(TEST_MMA): $(CPU_OBJS) $(OBJ)/test_mma.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 $(TEST_CG): $(CPU_OBJS) $(GPU_OBJS) $(OBJ)/test_cg_gpu.o
@@ -103,6 +109,7 @@ test: all
 	./$(TEST_ADJ)
 	./$(TEST_STR)
 	./$(TEST_SADJ)
+	./$(TEST_MMA)
 	./$(TEST_TH)
 	./$(TEST_TE)
 	./$(TEST_CG)
@@ -110,12 +117,13 @@ test: all
 	./$(TEST_MBB)
 
 # CPU-only checks (no GPU / no metallib needed).
-test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ)
+test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA)
 	./$(TEST_FEM)
 	./$(TEST_MG)
 	./$(TEST_ADJ)
 	./$(TEST_STR)
 	./$(TEST_SADJ)
+	./$(TEST_MMA)
 
 run: $(TOPOPT) $(METALLIB)
 	./$(TOPOPT) mbb
@@ -139,5 +147,5 @@ $(METALLIB): $(METAL_AIR)
 
 clean:
 	rm -rf $(OBJ) $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) \
-	       $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TOPOPT) \
-	       $(METAL_AIR) $(METALLIB)
+	       $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) \
+	       $(TEST_MMA) $(TOPOPT) $(METAL_AIR) $(METALLIB)
