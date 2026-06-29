@@ -25,6 +25,8 @@ CPU_SRCS := $(SRC)/fem/H8Element.cpp $(SRC)/fem/FEM3D.cpp \
 AXI_SRCS := $(SRC)/fem/AxiQ4Element.cpp $(SRC)/fem/FEM2DAxi.cpp
 # Discrete thermo-elastic adjoint (Eigen only, no Metal) — Phase 4 validation.
 ADJ_SRCS := $(SRC)/adjoint/ThermoElasticAdjoint.cpp
+# Axisymmetric stress p-norm adjoint (Eigen only, no Metal) — Phase 4 step 7a.
+AXIADJ_SRCS := $(SRC)/adjoint/AxiStressAdjoint.cpp
 # Metal context core (device/queue/library + single metal-cpp impl TU).
 GPU_CORE_SRCS := $(SRC)/gpu/MetalContext.cpp $(SRC)/gpu/metal_impl.cpp
 # GPU solvers (matrix-free CG + Helmholtz filter), depend on CPU FEM core.
@@ -37,6 +39,7 @@ IO_SRCS  := $(SRC)/io/STLExporter.cpp
 CPU_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(CPU_SRCS))
 AXI_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(AXI_SRCS))
 ADJ_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(ADJ_SRCS))
+AXIADJ_OBJS   := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(AXIADJ_SRCS))
 GPU_CORE_OBJS := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(GPU_CORE_SRCS))
 GPU_OBJS      := $(GPU_CORE_OBJS) \
                  $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(GPU_SOLVER_SRCS))
@@ -60,10 +63,11 @@ TEST_STR   := $(BUILD)/test_stress
 TEST_SADJ  := $(BUILD)/test_stress_adjoint_fd
 TEST_MMA   := $(BUILD)/test_mma
 TEST_AXI   := $(BUILD)/test_axisymmetric
+TEST_AXISADJ := $(BUILD)/test_axi_stress_adjoint_fd
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
-all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TOPOPT) $(METALLIB)
+all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TOPOPT) $(METALLIB)
 
 # --- link rules ---
 $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
@@ -90,6 +94,10 @@ $(TEST_MMA): $(CPU_OBJS) $(OBJ)/test_mma.o
 
 # CPU-pure: 2D axisymmetric Q4 FEM gate (Phase 4) — Lame thick-cylinder oracle.
 $(TEST_AXI): $(AXI_OBJS) $(OBJ)/test_axisymmetric.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# CPU-pure: axisymmetric stress p-norm adjoint gate (Phase 4 step 7a) — FD oracle.
+$(TEST_AXISADJ): $(AXI_OBJS) $(AXIADJ_OBJS) $(OBJ)/test_axi_stress_adjoint_fd.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 $(TEST_CG): $(CPU_OBJS) $(GPU_OBJS) $(OBJ)/test_cg_gpu.o
@@ -119,6 +127,7 @@ test: all
 	./$(TEST_SADJ)
 	./$(TEST_MMA)
 	./$(TEST_AXI)
+	./$(TEST_AXISADJ)
 	./$(TEST_TH)
 	./$(TEST_TE)
 	./$(TEST_CG)
@@ -126,7 +135,7 @@ test: all
 	./$(TEST_MBB)
 
 # CPU-only checks (no GPU / no metallib needed).
-test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI)
+test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ)
 	./$(TEST_FEM)
 	./$(TEST_MG)
 	./$(TEST_ADJ)
@@ -134,6 +143,7 @@ test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA
 	./$(TEST_SADJ)
 	./$(TEST_MMA)
 	./$(TEST_AXI)
+	./$(TEST_AXISADJ)
 
 run: $(TOPOPT) $(METALLIB)
 	./$(TOPOPT) mbb
@@ -158,4 +168,5 @@ $(METALLIB): $(METAL_AIR)
 clean:
 	rm -rf $(OBJ) $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) \
 	       $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) \
-	       $(TEST_MMA) $(TEST_AXI) $(TOPOPT) $(METAL_AIR) $(METALLIB)
+	       $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TOPOPT) $(METAL_AIR) \
+	       $(METALLIB)
