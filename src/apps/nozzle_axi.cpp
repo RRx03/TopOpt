@@ -205,11 +205,15 @@ int main() {
                     255.0 * std::clamp(rhoPhys(grid.elemId(ei, ej)), 0.0, 1.0)));
             };
             for (int ei = nr - 1; ei >= 0; --ei) cs.put(px(ei));  // left wall (b->a)
-            for (int k = 0; k < 2 * boreHalf; ++k) cs.put(char(0)); // bore (void)
+            // Bore (void). Mark the revolution axis (r=0) at the exact centre with
+            // a thin grey line so the image is unambiguous: walls hug this axis-bore.
+            for (int k = 0; k < 2 * boreHalf; ++k)
+                cs.put((k == boreHalf || k == boreHalf - 1) ? char(110) : char(0));
             for (int ei = 0; ei < nr; ++ei) cs.put(px(ei));        // right wall (a->b)
         }
-        std::printf("wrote output/nozzle_crosssection.pgm (%dx%d, full diameter,"
-                    " black bore + white walls)\n", Wf, nz);
+        std::printf("wrote output/nozzle_crosssection.pgm (%dx%d; black=void,"
+                    " white=material, grey centre line=revolution axis r=0)\n",
+                    Wf, nz);
     }
 
     // --- Revolve the axisymmetric design into a 3D STL (watertight voxels) ---
