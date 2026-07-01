@@ -69,10 +69,11 @@ NOZZLE_AXI := $(BUILD)/nozzle_axi
 TEST_AXI   := $(BUILD)/test_axisymmetric
 TEST_AXISADJ := $(BUILD)/test_axi_stress_adjoint_fd
 TEST_STOKES := $(BUILD)/test_stokes
+TEST_BRINK  := $(BUILD)/test_brinkman
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
-all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TOPOPT) $(METALLIB)
+all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TOPOPT) $(METALLIB)
 
 # --- link rules ---
 $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
@@ -113,6 +114,10 @@ $(TEST_AXISADJ): $(AXI_OBJS) $(AXIADJ_OBJS) $(OBJ)/test_axi_stress_adjoint_fd.o
 $(TEST_STOKES): $(STOKES_OBJS) $(OBJ)/test_stokes.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+# CPU-pure: Brinkman penalization gate (Phase 5) — Darcy-Brinkman + non-leak.
+$(TEST_BRINK): $(STOKES_OBJS) $(OBJ)/test_brinkman.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 $(TEST_CG): $(CPU_OBJS) $(GPU_OBJS) $(OBJ)/test_cg_gpu.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
@@ -142,6 +147,7 @@ test: all
 	./$(TEST_AXI)
 	./$(TEST_AXISADJ)
 	./$(TEST_STOKES)
+	./$(TEST_BRINK)
 	./$(TEST_TH)
 	./$(TEST_TE)
 	./$(TEST_CG)
@@ -149,7 +155,7 @@ test: all
 	./$(TEST_MBB)
 
 # CPU-only checks (no GPU / no metallib needed).
-test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES)
+test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK)
 	./$(TEST_FEM)
 	./$(TEST_MG)
 	./$(TEST_ADJ)
@@ -159,6 +165,7 @@ test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA
 	./$(TEST_AXI)
 	./$(TEST_AXISADJ)
 	./$(TEST_STOKES)
+	./$(TEST_BRINK)
 
 run: $(TOPOPT) $(METALLIB)
 	./$(TOPOPT) mbb
@@ -183,5 +190,5 @@ $(METALLIB): $(METAL_AIR)
 clean:
 	rm -rf $(OBJ) $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) \
 	       $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) \
-	       $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TOPOPT) \
-	       $(METAL_AIR) $(METALLIB)
+	       $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) \
+	       $(TEST_BRINK) $(TOPOPT) $(METAL_AIR) $(METALLIB)

@@ -59,6 +59,7 @@ StokesSolver::StokesSolver(const Grid3D& grid, double mu, double h,
     Eigen::Matrix<double, 8, 8> Le = Eigen::Matrix<double, 8, 8>::Zero();
     std::array<Eigen::Matrix<double, 8, 8>, 3> Gd{};
     for (auto& m : Gd) m.setZero();
+    me_.setZero();                          // velocity mass matrix (Brinkman)
     sLoad_.fill(0.0);
 
     for (int ig = 0; ig < 2; ++ig)
@@ -78,6 +79,7 @@ StokesSolver::StokesSolver(const Grid3D& grid, double mu, double h,
                         for (int d = 0; d < 3; ++d)
                             lab += dNdx[a][d] * dNdx[b][d];
                         Le(a, b) += lab * detJ;
+                        me_(a, b) += N[a] * N[b] * detJ;
                         for (int d = 0; d < 3; ++d)
                             Gd[static_cast<size_t>(d)](a, b) +=
                                 N[a] * dNdx[b][d] * detJ;
@@ -118,11 +120,23 @@ void StokesSolver::setFixedDofs(const std::vector<int>& fixedDofs) {
 
 StokesSolver::Vec StokesSolver::solve(
     const std::array<double, 3>& bodyForce) const {
-    return solve(bodyForce, Vec::Zero(nDofTotal()));
+    return assembleAndSolve(bodyForce, Vec::Zero(nDofTotal()), nullptr);
 }
 
 StokesSolver::Vec StokesSolver::solve(
     const std::array<double, 3>& bodyForce, const Vec& nodalLoad) const {
+    return assembleAndSolve(bodyForce, nodalLoad, nullptr);
+}
+
+StokesSolver::Vec StokesSolver::solve(
+    const std::array<double, 3>& bodyForce, const Vec& nodalLoad,
+    const Vec& gamma) const {
+    return assembleAndSolve(bodyForce, nodalLoad, &gamma);
+}
+
+StokesSolver::Vec StokesSolver::assembleAndSolve(
+    const std::array<double, 3>& bodyForce, const Vec& nodalLoad,
+    const Vec* gamma) const {
     const int n = nFree_;
     std::vector<Eigen::Triplet<double>> triplets;
     triplets.reserve(static_cast<size_t>(grid_.nElems()) * 32 * 32);
@@ -139,13 +153,25 @@ StokesSolver::Vec StokesSolver::solve(
                         ldof[static_cast<size_t>(4 * a + c)] =
                             4 * nodes[static_cast<size_t>(a)] + c;
 
+                // Per-element Brinkman coefficient α(γ_e); 0 when no design field.
+                double alphaE = 0.0;
+                if (gamma != nullptr) {
+                    const int e = grid_.elemId(ex, ey, ez);
+                    alphaE = alpha((*gamma)(e));
+                }
+
                 for (int a = 0; a < 32; ++a) {
                     const int ra = dofMap_[static_cast<size_t>(ldof[static_cast<size_t>(a)])];
                     if (ra < 0) continue;
+                    const int na = a / 4, ca = a % 4;
                     for (int b = 0; b < 32; ++b) {
                         const int rb = dofMap_[static_cast<size_t>(ldof[static_cast<size_t>(b)])];
                         if (rb < 0) continue;
-                        triplets.emplace_back(ra, rb, ke_(a, b));
+                        double v = ke_(a, b);
+                        // Brinkman: + α(γ_e) ∫ N_a N_b on matching velocity comps.
+                        if (alphaE != 0.0 && ca < 3 && ca == b % 4)
+                            v += alphaE * me_(na, b / 4);
+                        triplets.emplace_back(ra, rb, v);
                     }
                 }
                 // Body-force load on velocity DOFs (pressure RHS block = 0).
