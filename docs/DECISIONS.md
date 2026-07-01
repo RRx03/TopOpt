@@ -30,3 +30,10 @@
   (première valeur avec fuite <1% sur le test de dalle solide), dans [1e3,1e5] (LL-LIT-004).
 - **Conséquences** : γ=1 fluide, γ=0 solide ; frontière fluide-solide = variable de
   design. α_max trop grand dégradera le conditionnement (à surveiller en couplage/adjoint).
+
+## ADR-020 : CHT advection-diffusion + SUPG, solveur non-symétrique direct
+- **Date** : 2026-07-02
+- **Décision** : température CHT `−∇·(k(γ)∇T)+u·∇T=Q`, Q1 scalaire, stabilisation
+  SUPG (τ=h/(2|u|)(coth Pe−1/Pe)), système non-symétrique résolu en direct (SparseLU).
+- **Conséquences** : advection stabilisée (pas d'oscillation à haut Péclet) ; u pris
+  comme champ nodal (couplage à Stokes-Brinkman). k(γ)=k_s+(k_f−k_s)γ.

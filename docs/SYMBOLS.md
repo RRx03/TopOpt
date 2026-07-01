@@ -3,6 +3,7 @@ Last updated: 2026-06-28
 
 ## Classes / Structs (Phase 5)
 - `topopt::StokesSolver` — src/physics/StokesSolver.hpp — Stokes Q1-Q1 PSPG + Brinkman α(γ)u (saddle-point, Eigen direct)
+- `topopt::CHTSolver` — src/physics/CHTSolver.hpp — advection-diffusion (conjugate heat transfer) + SUPG, non-symétrique
 
 ## Classes / Structs (Phase 4)
 - `topopt::gpu::ThermalSolver` — src/physics/ThermalSolver.hpp — conduction GPU matrix-free (−div(k∇T)=q)

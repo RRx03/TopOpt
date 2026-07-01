@@ -16,11 +16,13 @@
 3. ✅ **Brinkman penalization** α(γ)u (`StokesSolver::setBrinkman`) — validé :
    Darcy-Brinkman 1D analytique (cosh) relErr 1.2e-3 O(h²) ; α→0 = Poiseuille ;
    non-fuite calibrée, sweet spot α_max=1e4 (fuite 0.47%). LL-LIT-004 respecté.
+4. ✅ **CHT** (`CHTSolver`) — advection-diffusion + SUPG : conduction exacte 4.4e-15,
+   adv-diff 1D O(h²), piège Péclet démontré (Galerkin oscille, SUPG propre).
+   → **PRIMAL TRIPLE COMPLET** : Stokes-Brinkman→u, CHT→T, thermo-élastique→U.
 
 ## Next up (brief Phase 5)
 2. (différé GPU) Solveur saddle-point itératif MINRES/Uzawa — production ; le direct
    Eigen suffit pour les oracles CPU. À porter avec le GPU.
-4. **CHT** : advection-diffusion couplée, validation analytique.
 5. **Adjoint 3 blocs validé DF (1e-3)** — gate le plus dur du projet.
 6. Heaviside + intégration MMA. 7. Cooling jacket tuyère. 8. Clôture.
 
