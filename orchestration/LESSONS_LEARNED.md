@@ -130,6 +130,21 @@ LL-004 car LL-002/003 étaient déjà pris.)*
 ## Catégorie : Erreurs de TO
 *(À enrichir)*
 
+## Catégorie : Build / outillage
+
+### LL-010 : Makefile sans dépendances headers → .o stale → crash ABI (Phase 5, 2026-07-01)
+- **Symptôme** : après modification d'un header (ex. taille d'une classe/struct
+  changée), un `.o` de test non recompilé garde l'ancienne ABI → mismatch →
+  SIGTRAP / exit 133 à l'exécution (pas une erreur de compilation)
+- **Cause** : les Makefiles du projet ne trackent pas les dépendances headers
+  (`$(OBJ)/%.o: $(SRC)/%.cpp` sans `-MMD -MP`), donc `make` ne recompile pas un
+  `.o` quand un header inclus change
+- **Leçon** : après toute modification de header structurel, **`make clean` puis
+  rebuild** (ou ajouter `-MMD -MP` + `-include $(DEPS)` au Makefile). En cas de
+  crash inexpliqué à l'exécution après un changement de header, suspecter un `.o`
+  stale AVANT de chercher un bug logique
+- **Vérification** : `make clean && make test_cpu` reproduit proprement
+
 ---
 
 ## Catégorie : Erreurs de validation
