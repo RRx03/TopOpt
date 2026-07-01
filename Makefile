@@ -25,6 +25,8 @@ CPU_SRCS := $(SRC)/fem/H8Element.cpp $(SRC)/fem/FEM3D.cpp \
 AXI_SRCS := $(SRC)/fem/AxiQ4Element.cpp $(SRC)/fem/FEM2DAxi.cpp
 # Discrete thermo-elastic adjoint (Eigen only, no Metal) — Phase 4 validation.
 ADJ_SRCS := $(SRC)/adjoint/ThermoElasticAdjoint.cpp
+# Triple-coupled adjoint Stokes->CHT->thermo-elastic (Eigen only) — Phase 5 gate.
+TRIADJ_SRCS := $(SRC)/adjoint/TripleAdjoint.cpp
 # Incompressible Stokes Q1-Q1 PSPG solver (Eigen only, no Metal) — Phase 5.
 STOKES_SRCS := $(SRC)/physics/StokesSolver.cpp
 # CHT advection-diffusion + SUPG temperature solver (Eigen only, no Metal) — P5.
@@ -43,6 +45,7 @@ IO_SRCS  := $(SRC)/io/STLExporter.cpp
 CPU_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(CPU_SRCS))
 AXI_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(AXI_SRCS))
 ADJ_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(ADJ_SRCS))
+TRIADJ_OBJS   := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(TRIADJ_SRCS))
 STOKES_OBJS   := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(STOKES_SRCS))
 CHT_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(CHT_SRCS))
 AXIADJ_OBJS   := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(AXIADJ_SRCS))
@@ -74,10 +77,11 @@ TEST_AXISADJ := $(BUILD)/test_axi_stress_adjoint_fd
 TEST_STOKES := $(BUILD)/test_stokes
 TEST_BRINK  := $(BUILD)/test_brinkman
 TEST_CHT   := $(BUILD)/test_cht
+TEST_TRIADJ := $(BUILD)/test_triple_adjoint_fd
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
-all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TOPOPT) $(METALLIB)
+all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TOPOPT) $(METALLIB)
 
 # --- link rules ---
 $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
@@ -126,6 +130,10 @@ $(TEST_BRINK): $(STOKES_OBJS) $(OBJ)/test_brinkman.o
 $(TEST_CHT): $(CHT_OBJS) $(OBJ)/test_cht.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+# CPU-pure: TRIPLE-coupled adjoint gate (Phase 5, hardest) — FD oracle < 1e-3.
+$(TEST_TRIADJ): $(OBJ)/fem/H8Element.o $(TRIADJ_OBJS) $(OBJ)/test_triple_adjoint_fd.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 $(TEST_CG): $(CPU_OBJS) $(GPU_OBJS) $(OBJ)/test_cg_gpu.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
@@ -157,6 +165,7 @@ test: all
 	./$(TEST_STOKES)
 	./$(TEST_BRINK)
 	./$(TEST_CHT)
+	./$(TEST_TRIADJ)
 	./$(TEST_TH)
 	./$(TEST_TE)
 	./$(TEST_CG)
@@ -164,7 +173,7 @@ test: all
 	./$(TEST_MBB)
 
 # CPU-only checks (no GPU / no metallib needed).
-test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT)
+test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ)
 	./$(TEST_FEM)
 	./$(TEST_MG)
 	./$(TEST_ADJ)
@@ -176,6 +185,7 @@ test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA
 	./$(TEST_STOKES)
 	./$(TEST_BRINK)
 	./$(TEST_CHT)
+	./$(TEST_TRIADJ)
 
 run: $(TOPOPT) $(METALLIB)
 	./$(TOPOPT) mbb
@@ -201,4 +211,5 @@ clean:
 	rm -rf $(OBJ) $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) \
 	       $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) \
 	       $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) \
-	       $(TEST_BRINK) $(TEST_CHT) $(TOPOPT) $(METAL_AIR) $(METALLIB)
+	       $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TOPOPT) $(METAL_AIR) \
+	       $(METALLIB)
