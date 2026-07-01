@@ -37,3 +37,12 @@
   SUPG (τ=h/(2|u|)(coth Pe−1/Pe)), système non-symétrique résolu en direct (SparseLU).
 - **Conséquences** : advection stabilisée (pas d'oscillation à haut Péclet) ; u pris
   comme champ nodal (couplage à Stokes-Brinkman). k(γ)=k_s+(k_f−k_s)γ.
+
+## ADR-021 : Adjoint triple-couplé par cascade inverse, validé DF (gate)
+- **Date** : 2026-07-02
+- **Décision** : adjoint de la cascade one-way γ→(u,p)→T→U résolu en cascade inverse
+  (λ_e élastique → λ_t thermique via G^T λ_e → λ_s Stokes via (∂R_t/∂u)^T λ_t).
+  Assemblage explicite des matrices (A, K_t, K_e) + transposées, SparseLU, CPU double.
+- **Validation** : DF centrées, max rel 2.1e-7 (tol brief 1e-3), 3 termes non triviaux.
+- **Conséquences** : gradient multiphysique fiable pour l'optimisation cooling jacket.
+  SUPG exclu du gate (Péclet modéré) → adjoint SUPG = raffinement production ultérieur.

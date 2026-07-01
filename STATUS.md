@@ -19,11 +19,14 @@
 4. ✅ **CHT** (`CHTSolver`) — advection-diffusion + SUPG : conduction exacte 4.4e-15,
    adv-diff 1D O(h²), piège Péclet démontré (Galerkin oscille, SUPG propre).
    → **PRIMAL TRIPLE COMPLET** : Stokes-Brinkman→u, CHT→T, thermo-élastique→U.
+5. ✅ **ADJOINT TRIPLE-COUPLÉ validé par DF** (`TripleAdjoint`) — **GATE le plus dur
+   du projet FRANCHI** : max rel 2.1e-7 / abs 7e-9 (tol 1e-3), 3 termes actifs.
+   Le cœur scientifique (TO multiphysique fluide-structure-thermique par adjoint)
+   est validé de bout en bout.
 
 ## Next up (brief Phase 5)
 2. (différé GPU) Solveur saddle-point itératif MINRES/Uzawa — production ; le direct
    Eigen suffit pour les oracles CPU. À porter avec le GPU.
-5. **Adjoint 3 blocs validé DF (1e-3)** — gate le plus dur du projet.
 6. Heaviside + intégration MMA. 7. Cooling jacket tuyère. 8. Clôture.
 
 ## Note
