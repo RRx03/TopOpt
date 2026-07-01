@@ -22,3 +22,11 @@
   fluide en CPU double (système saddle-point résolu en direct Eigen), pas GPU float32.
 - **Conséquences** : oracle propre (Poiseuille, DF adjoint) ; portage GPU
   (MINRES/Uzawa) en production, re-validé contre le chemin CPU.
+
+## ADR-019 : Brinkman penalization Borrvall-Petersson, α_max=1e4
+- **Date** : 2026-07-01
+- **Décision** : terme α(γ)u dans le moment ; interpolation convexe Borrvall-Petersson
+  α(γ)=α_max+(α_min−α_max)γ(1+q)/(γ+q), q=0.1, α_min=0. Sweet spot **α_max=1e4**
+  (première valeur avec fuite <1% sur le test de dalle solide), dans [1e3,1e5] (LL-LIT-004).
+- **Conséquences** : γ=1 fluide, γ=0 solide ; frontière fluide-solide = variable de
+  design. α_max trop grand dégradera le conditionnement (à surveiller en couplage/adjoint).

@@ -13,11 +13,13 @@
    - **piloté par pression** (valide couplage B/Bᵀ, pression linéaire non triviale) :
      u_z O(h²) 7.4e-3→1.8e-3, linéarité pression 3.3%→1.5%, pas de damier.
    - inf-sup confirmé (α=1e-7 → pression 4e4× plus bruitée → PSPG décisif).
+3. ✅ **Brinkman penalization** α(γ)u (`StokesSolver::setBrinkman`) — validé :
+   Darcy-Brinkman 1D analytique (cosh) relErr 1.2e-3 O(h²) ; α→0 = Poiseuille ;
+   non-fuite calibrée, sweet spot α_max=1e4 (fuite 0.47%). LL-LIT-004 respecté.
 
 ## Next up (brief Phase 5)
 2. (différé GPU) Solveur saddle-point itératif MINRES/Uzawa — production ; le direct
    Eigen suffit pour les oracles CPU. À porter avec le GPU.
-3. **Brinkman penalization** : α(ρ)u, frontière fluide-solide = variable de design.
 4. **CHT** : advection-diffusion couplée, validation analytique.
 5. **Adjoint 3 blocs validé DF (1e-3)** — gate le plus dur du projet.
 6. Heaviside + intégration MMA. 7. Cooling jacket tuyère. 8. Clôture.
