@@ -1,0 +1,29 @@
+{
+  "meta":   { "name": "bracket_thermo", "version": 1, "dim": "3d" },
+  "domain": { "grid": [24, 8, 8], "size_mm": [24, 8, 8], "geometry": "box" },
+  "material": {
+    "E0": 1.0, "Emin": 1e-4, "nu": 0.3, "penal": 3.0,
+    "k_solid": 1.0, "alpha_th": 1.0e-2, "Tref": 0.0
+  },
+  "physics": ["thermal", "elastic"],
+  "bc": {
+    "fixed": [
+      { "face": "x-", "dof": "all" }
+    ],
+    "loads": [
+      { "face": "x+", "dof": "z", "value": -0.05 }
+    ],
+    "thermal": [
+      { "face": "x-", "dof": "T", "value": 0.0 },
+      { "face": "x+", "dof": "Q", "value": 40.0 }
+    ]
+  },
+  "filter":  { "radius_mm": 1.5, "heaviside": { "beta": [1, 2, 4, 8], "eta": 0.5 } },
+  "optimize": {
+    "objective": "mass",
+    "constraints": [ { "type": "vonmises", "max": 0.12 } ],
+    "optimizer": "mma",
+    "max_iter": 120
+  },
+  "output": { "dir": "output/bracket_thermo", "formats": ["vti"], "fields": ["density"] }
+}

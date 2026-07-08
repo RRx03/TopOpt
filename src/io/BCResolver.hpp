@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -63,6 +64,37 @@ public:
                 for (int c : dofComponents(e.dof)) F(3 * n + c) += per;
         }
         return F;
+    }
+
+    // --- Thermal boundary conditions (two-block thermo-elastic path) ----------
+    // The discrete two-block adjoint condenses Dirichlet temperature nodes to a
+    // homogeneous value (T = 0), so only the node SET is resolved here; a
+    // non-zero "value" on a thermal Dirichlet entry is not representable and is
+    // ignored (documented). Selector "dof":"T" marks a Dirichlet entry; any
+    // other thermal entry is treated as a heat source Q.
+    static std::vector<int> thermalFixedNodes(const Grid3D& g, const ProblemSpec& s) {
+        std::vector<int> nodes;
+        for (const auto& e : s.thermal)
+            if (e.dof == "T")
+                for (int n : selectNodes(g, e)) nodes.push_back(n);
+        std::sort(nodes.begin(), nodes.end());
+        nodes.erase(std::unique(nodes.begin(), nodes.end()), nodes.end());
+        return nodes;
+    }
+
+    // Nodal heat-source vector (length nNodes). Each source entry's "value" is
+    // the TOTAL heat over its selected nodes, distributed equally (same
+    // convention as loadVector). Entries with dof == "T" are Dirichlet, skipped.
+    static Eigen::VectorXd thermalSource(const Grid3D& g, const ProblemSpec& s) {
+        Eigen::VectorXd Q = Eigen::VectorXd::Zero(g.nNodes());
+        for (const auto& e : s.thermal) {
+            if (e.dof == "T") continue;
+            const auto nodes = selectNodes(g, e);
+            if (nodes.empty()) continue;
+            const double per = e.value / static_cast<double>(nodes.size());
+            for (int n : nodes) Q(n) += per;
+        }
+        return Q;
     }
 
 private:
