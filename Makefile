@@ -45,6 +45,8 @@ GPU_SOLVER_SRCS := $(SRC)/gpu/CGSolver3D.cpp $(SRC)/filter/Helmholtz3D.cpp \
                    $(SRC)/physics/ThermalSolver.cpp
 # IO.
 IO_SRCS  := $(SRC)/io/STLExporter.cpp
+# Smooth iso-surface extraction (marching cubes, Eigen only, no Metal) — Phase 5R.
+MC_SRCS  := $(SRC)/io/MarchingCubes.cpp
 
 CPU_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(CPU_SRCS))
 AXI_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(AXI_SRCS))
@@ -59,6 +61,7 @@ GPU_CORE_OBJS := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(GPU_CORE_SRCS))
 GPU_OBJS      := $(GPU_CORE_OBJS) \
                  $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(GPU_SOLVER_SRCS))
 IO_OBJS       := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(IO_SRCS))
+MC_OBJS       := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(MC_SRCS))
 
 # Metal shaders -> AIR -> single .metallib
 METAL_SRCS := $(wildcard $(SHADERS)/*.metal)
@@ -86,12 +89,13 @@ TEST_CHT   := $(BUILD)/test_cht
 TEST_TRIADJ := $(BUILD)/test_triple_adjoint_fd
 TEST_DISSADJ := $(BUILD)/test_dissipation_adjoint_fd
 TEST_TMAXADJ := $(BUILD)/test_tmax_adjoint_fd
+TEST_MC    := $(BUILD)/test_marching_cubes
 COOLING_JACKET := $(BUILD)/cooling_jacket
 BP_DIFFUSER := $(BUILD)/bp_diffuser
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
-all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TOPOPT) $(METALLIB)
+all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC) $(TOPOPT) $(METALLIB)
 
 # --- link rules ---
 $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
@@ -152,6 +156,10 @@ $(TEST_DISSADJ): $(OBJ)/fem/H8Element.o $(DISSADJ_OBJS) $(OBJ)/test_dissipation_
 $(TEST_TMAXADJ): $(OBJ)/fem/H8Element.o $(TMAXADJ_OBJS) $(OBJ)/test_tmax_adjoint_fd.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+# CPU-pure: marching-cubes smooth iso-surface gate (Phase 5R) — sphere oracle.
+$(TEST_MC): $(MC_OBJS) $(OBJ)/test_marching_cubes.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 # CPU-pure: end-to-end multiphysics TO demo (Phase 5) — MMA + TripleAdjoint +
 # 3D density filter + Heaviside continuation. Produces output/cooling_jacket.vti.
 $(COOLING_JACKET): $(CPU_OBJS) $(TRIADJ_OBJS) $(OBJ)/apps/cooling_jacket.o
@@ -197,6 +205,7 @@ test: all
 	./$(TEST_TRIADJ)
 	./$(TEST_DISSADJ)
 	./$(TEST_TMAXADJ)
+	./$(TEST_MC)
 	./$(TEST_TH)
 	./$(TEST_TE)
 	./$(TEST_CG)
@@ -204,7 +213,7 @@ test: all
 	./$(TEST_MBB)
 
 # CPU-only checks (no GPU / no metallib needed).
-test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TEST_TMAXADJ)
+test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC)
 	./$(TEST_FEM)
 	./$(TEST_MG)
 	./$(TEST_ADJ)
@@ -219,6 +228,7 @@ test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA
 	./$(TEST_TRIADJ)
 	./$(TEST_DISSADJ)
 	./$(TEST_TMAXADJ)
+	./$(TEST_MC)
 
 run: $(TOPOPT) $(METALLIB)
 	./$(TOPOPT) mbb
@@ -245,5 +255,5 @@ clean:
 	       $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) \
 	       $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) \
 	       $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) \
-	       $(TEST_TMAXADJ) $(COOLING_JACKET) $(BP_DIFFUSER) \
+	       $(TEST_TMAXADJ) $(TEST_MC) $(COOLING_JACKET) $(BP_DIFFUSER) \
 	       $(TOPOPT) $(METAL_AIR) $(METALLIB)
