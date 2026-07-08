@@ -29,6 +29,14 @@ public:
     // Tributary z-weight: 0.5 at the z-extremities, 1 otherwise.
     Vec pressureLoadInner(double p_i) const;
 
+    // Consistent nodal load from an internal pressure acting on the (possibly
+    // profiled) inner face r = rNode(0,j). pAtRow gives the pressure at each
+    // z-node (size nzn()). The face normal (into the wall, +r side) is used, so
+    // a slanted bore also picks up an axial load component. For a rectangular
+    // grid with constant pressure this reduces EXACTLY to pressureLoadInner
+    // (the sanity guardrail asserts bit-equality). 2*pi is omitted as elsewhere.
+    Vec pressureLoadInnerProfiled(const std::vector<double>& pAtRow) const;
+
     // Recovered stress [sigma_r, sigma_z, sigma_theta, tau_rz] at element
     // centroids, one Vec4 per element (elemId order).
     std::vector<AxiQ4Element::Vec4> elementStress(const Vec& E,

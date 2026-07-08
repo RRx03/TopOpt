@@ -1,6 +1,8 @@
 #pragma once
 
 #include <array>
+#include <utility>
+#include <vector>
 
 namespace topopt {
 
@@ -41,6 +43,22 @@ public:
     double r(int i) const { return a_ + i * hr_; }
     double z(int j) const { return j * hz_; }
 
+    // --- Optional mapped (body-fitted) radial node coordinates ---------------
+    // By default the mesh is the rectangular annulus [a,b] x [0,H] and the node
+    // radius depends on i alone (r(i) = a + i*hr). A profiled geometry (e.g. a
+    // convergent-divergent nozzle bore) supplies a per-node radius map r(i,j)
+    // via setNodeRadii(); z stays separable (z(j) = j*hz). The Q4 element and
+    // the whole axisymmetric machinery already handle the resulting distorted
+    // elements through the isoparametric Jacobian, so no physics changes.
+    // rmap_ empty => rectangular (rNode(i,j) == r(i)) => bit-identical to before.
+    void setNodeRadii(std::vector<double> rmap) { rmap_ = std::move(rmap); }
+    bool mapped() const { return !rmap_.empty(); }
+
+    double rNode(int i, int j) const {
+        return rmap_.empty() ? (a_ + i * hr_)
+                             : rmap_[static_cast<size_t>(nodeId(i, j))];
+    }
+
     int nElems() const { return nr_ * nz_; }
     int nNodes() const { return nrn() * nzn(); }
     int nDof() const { return 2 * nNodes(); }
@@ -78,6 +96,7 @@ private:
     double H_;
     double hr_;
     double hz_;
+    std::vector<double> rmap_;  // empty => rectangular; else per-node radii
 };
 
 } // namespace topopt

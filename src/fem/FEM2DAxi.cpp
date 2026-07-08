@@ -1,5 +1,7 @@
 #include "fem/FEM2DAxi.hpp"
 
+#include <cmath>
+
 #include <Eigen/SparseCholesky>
 
 namespace topopt {
@@ -23,7 +25,7 @@ void FEM2DAxi::elementCoords(int ei, int ej, std::array<double, 4>& r_nodes,
     for (int dj = 0; dj < 2; ++dj)
         for (int di = 0; di < 2; ++di) {
             const size_t l = static_cast<size_t>(di + 2 * dj);
-            r_nodes[l] = grid_.r(ei + di);
+            r_nodes[l] = grid_.rNode(ei + di, ej + dj);
             z_nodes[l] = grid_.z(ej + dj);
         }
 }
@@ -81,6 +83,32 @@ FEM2DAxi::Vec FEM2DAxi::pressureLoadInner(double p_i) const {
         const double w = (j == 0 || j == grid_.nz()) ? 0.5 : 1.0;
         const int node = grid_.nodeId(0, j);
         F(2 * node + 0) += p_i * a * hz * w;  // radial DOF
+    }
+    return F;
+}
+
+FEM2DAxi::Vec FEM2DAxi::pressureLoadInnerProfiled(
+    const std::vector<double>& pAtRow) const {
+    Vec F = Vec::Zero(grid_.nDof());
+    for (int j = 0; j < grid_.nz(); ++j) {
+        // Inner-face edge between nodes (0,j) and (0,j+1).
+        const double rA = grid_.rNode(0, j), zA = grid_.z(j);
+        const double rB = grid_.rNode(0, j + 1), zB = grid_.z(j + 1);
+        const double dr = rB - rA, dz = zB - zA;
+        const double L = std::sqrt(dr * dr + dz * dz);
+        if (L <= 0.0) continue;
+        // Outward normal into the wall (+r side): (dz, -dr)/L. For a vertical
+        // edge (dr=0) this is (1,0), i.e. purely radial, matching Lame.
+        const double nr = dz / L, nz = -dr / L;
+        const int nodeA = grid_.nodeId(0, j), nodeB = grid_.nodeId(0, j + 1);
+        // Consistent axisymmetric edge load: each endpoint gets p*r*(L/2)*n,
+        // with its own nodal pressure and radius (2*pi omitted, r-weight kept).
+        const double cA = pAtRow[static_cast<size_t>(j)] * rA * 0.5 * L;
+        const double cB = pAtRow[static_cast<size_t>(j + 1)] * rB * 0.5 * L;
+        F(2 * nodeA + 0) += cA * nr;
+        F(2 * nodeA + 1) += cA * nz;
+        F(2 * nodeB + 0) += cB * nr;
+        F(2 * nodeB + 1) += cB * nz;
     }
     return F;
 }

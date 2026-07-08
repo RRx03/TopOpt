@@ -81,7 +81,9 @@ TEST_STR   := $(BUILD)/test_stress
 TEST_SADJ  := $(BUILD)/test_stress_adjoint_fd
 TEST_MMA   := $(BUILD)/test_mma
 NOZZLE_AXI := $(BUILD)/nozzle_axi
+NOZZLE_PROFILED := $(BUILD)/nozzle_profiled
 TEST_AXI   := $(BUILD)/test_axisymmetric
+TEST_AXIMAP := $(BUILD)/test_axi_mapped
 TEST_AXISADJ := $(BUILD)/test_axi_stress_adjoint_fd
 TEST_STOKES := $(BUILD)/test_stokes
 TEST_BRINK  := $(BUILD)/test_brinkman
@@ -95,7 +97,7 @@ BP_DIFFUSER := $(BUILD)/bp_diffuser
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
-all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC) $(TOPOPT) $(METALLIB)
+all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXIMAP) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC) $(TOPOPT) $(METALLIB)
 
 # --- link rules ---
 $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
@@ -124,9 +126,17 @@ $(TEST_MMA): $(CPU_OBJS) $(OBJ)/test_mma.o
 $(TEST_AXI): $(AXI_OBJS) $(OBJ)/test_axisymmetric.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+# CPU-pure: mapped-coordinate sanity (trivial mapping must reproduce Lame) — P5R.
+$(TEST_AXIMAP): $(AXI_OBJS) $(OBJ)/test_axi_mapped.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 # CPU-pure: axisymmetric stress p-norm adjoint gate (Phase 4 step 7a) — FD oracle.
 # CPU-pure axisymmetric structural nozzle TO demo (step 7b) + revolved STL.
 $(NOZZLE_AXI): $(CPU_OBJS) $(AXI_OBJS) $(AXIADJ_OBJS) $(IO_OBJS) $(OBJ)/apps/nozzle_axi.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# CPU-pure: TRUE-throat profiled nozzle TO (Phase 5R) — mapped bore + revolved STL.
+$(NOZZLE_PROFILED): $(CPU_OBJS) $(AXI_OBJS) $(AXIADJ_OBJS) $(IO_OBJS) $(OBJ)/apps/nozzle_profiled.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 $(TEST_AXISADJ): $(AXI_OBJS) $(AXIADJ_OBJS) $(OBJ)/test_axi_stress_adjoint_fd.o
@@ -198,6 +208,7 @@ test: all
 	./$(TEST_SADJ)
 	./$(TEST_MMA)
 	./$(TEST_AXI)
+	./$(TEST_AXIMAP)
 	./$(TEST_AXISADJ)
 	./$(TEST_STOKES)
 	./$(TEST_BRINK)
@@ -213,7 +224,7 @@ test: all
 	./$(TEST_MBB)
 
 # CPU-only checks (no GPU / no metallib needed).
-test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC)
+test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXIMAP) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC)
 	./$(TEST_FEM)
 	./$(TEST_MG)
 	./$(TEST_ADJ)
@@ -221,6 +232,7 @@ test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA
 	./$(TEST_SADJ)
 	./$(TEST_MMA)
 	./$(TEST_AXI)
+	./$(TEST_AXIMAP)
 	./$(TEST_AXISADJ)
 	./$(TEST_STOKES)
 	./$(TEST_BRINK)
@@ -253,7 +265,8 @@ $(METALLIB): $(METAL_AIR)
 clean:
 	rm -rf $(OBJ) $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) \
 	       $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) \
-	       $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) \
-	       $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) \
-	       $(TEST_TMAXADJ) $(TEST_MC) $(COOLING_JACKET) $(BP_DIFFUSER) \
+	       $(TEST_MMA) $(TEST_AXI) $(TEST_AXIMAP) $(TEST_AXISADJ) \
+	       $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) \
+	       $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC) $(COOLING_JACKET) \
+	       $(BP_DIFFUSER) $(NOZZLE_AXI) $(NOZZLE_PROFILED) \
 	       $(TOPOPT) $(METAL_AIR) $(METALLIB)

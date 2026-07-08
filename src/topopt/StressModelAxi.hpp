@@ -85,7 +85,7 @@ public:
         for (int dj = 0; dj < 2; ++dj)
             for (int di = 0; di < 2; ++di) {
                 const size_t l = static_cast<size_t>(di + 2 * dj);
-                rn[l] = grid.r(ei + di);
+                rn[l] = grid.rNode(ei + di, ej + dj);
                 zn[l] = grid.z(ej + dj);
             }
     }
