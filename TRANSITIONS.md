@@ -347,6 +347,12 @@ ingénieur : von Mises < σ_yield. Première adaptation aérospatiale : géomét
 
 ## Phase 5 — Couplage Stokes + CHT (Conjugate Heat Transfer)
 
+> **Statut (clôturé 2026-07-08)** : cœur validé de bout en bout — Stokes Q1-Q1 PSPG,
+> Brinkman, CHT+SUPG, **adjoint triple-couplé validé DF (2.1e-7)**, démonstrateur MMA
+> multiphysique (ratio fluide col 2.16×). Différés : contraintes spécifiques
+> (T_max/ΔP/von Mises), vraie géométrie tuyère, adjoint SUPG, portage GPU. Détail :
+> `TopOptP5/PHASE_5_REPORT.md`, `../orchestration/handoffs/PHASE_5_TO_6.md`.
+
 ### Objectif
 
 Le livrable phare du projet : TO multiphysique fluide-structure-thermique
