@@ -321,6 +321,9 @@ CPU.*
   col/extrémités 2.16×). Export ParaView (densité, vitesse, température, déplacement).
 - **Diffuseur de Borrvall-Petersson** (validation littérature) : reproduction du
   canal convergent lisse publié, dissipation 97 % meilleure que le design uniforme.
+- **Tuyère à col profilé** : alésage convergent-divergent réel (grille axisymétrique
+  à coordonnées mappées, validée par reproduction de Lamé), paroi optimisée sous von
+  Mises (masse −61 %, épaississement au col 2.42×).
 
 Visualisation : export **STL** (marching cubes, surfaces lisses) pour la géométrie,
 et **VTK `.vti`** pour les champs (ouvrable dans ParaView — rendu 3D, coupes,

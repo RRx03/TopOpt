@@ -63,13 +63,22 @@ Phase 6.**
 
 ---
 
-## Livrables recruteur manquants (VISION §6, méta-règles TRANSITIONS)
-- [ ] Gallery d'images (ParaView : densité, contrainte, canaux)
-- [ ] Validation vs papier publié (Borrvall-Petersson channel, ~5%)
-- [ ] Benchmark report (temps par cas, scaling) — GPU nécessaire pour la grande échelle
-- [ ] Vraie tuyère + cooling jacket sous contraintes réelles
-- [x] Validation rigoureuse par DF (6+ gates) — **fait, différenciant fort**
-- [x] Limitations honnêtement documentées — **fait (différés)**
+## Livrables recruteur — état (soldés 2026-07-08)
+- [x] **Validation vs papier publié** : diffuseur Borrvall-Petersson reproduit
+- [x] **Contrainte cooling jacket réelle** : adjoint T_max validé DF (7.5e-8)
+- [x] **Vraie tuyère à col profilé** : alésage convergent-divergent (Lamé-validé), masse −61%
+- [x] **Marching cubes** : STL lisse (aire/volume sphère 0.06%, watertight)
+- [x] **Livrable théorique** : `docs/THEORY.md` (méthode + 6 gates + résultats)
+- [x] Validation rigoureuse par DF (6 gates adjoints) — **différenciant fort**
+- [x] Export VTK/ParaView (densité, contrainte, température, vitesse)
+- [x] Limitations honnêtement documentées
+- [ ] Benchmark report grande échelle (nécessite portage GPU des adjoints) — différé
+- [ ] Cooling jacket sur la vraie tuyère profilée sous contraintes réelles combinées
+      (T_max + von Mises + ΔP) — assemblage des briques validées, différé
+
+Le socle recruteur est **substantiellement complet** : validation littérature,
+contraintes réelles validées, vraie géométrie, visualisation, document théorique.
+Restent des assemblages (pas de nouveau gate fondamental).
 
 ## Pièges spécifiques Phase 6 (LESSONS_LEARNED)
 Selon la direction (cf. brief) : Langelaar overhang (A), stabilisation NS/RANS (B),
