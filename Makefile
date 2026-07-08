@@ -27,6 +27,8 @@ AXI_SRCS := $(SRC)/fem/AxiQ4Element.cpp $(SRC)/fem/FEM2DAxi.cpp
 ADJ_SRCS := $(SRC)/adjoint/ThermoElasticAdjoint.cpp
 # Triple-coupled adjoint Stokes->CHT->thermo-elastic (Eigen only) — Phase 5 gate.
 TRIADJ_SRCS := $(SRC)/adjoint/TripleAdjoint.cpp
+# Dissipated-power (Borrvall-Petersson) adjoint (Eigen only) — Phase 5R gate.
+DISSADJ_SRCS := $(SRC)/adjoint/DissipationAdjoint.cpp
 # Incompressible Stokes Q1-Q1 PSPG solver (Eigen only, no Metal) — Phase 5.
 STOKES_SRCS := $(SRC)/physics/StokesSolver.cpp
 # CHT advection-diffusion + SUPG temperature solver (Eigen only, no Metal) — P5.
@@ -46,6 +48,7 @@ CPU_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(CPU_SRCS))
 AXI_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(AXI_SRCS))
 ADJ_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(ADJ_SRCS))
 TRIADJ_OBJS   := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(TRIADJ_SRCS))
+DISSADJ_OBJS  := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(DISSADJ_SRCS))
 STOKES_OBJS   := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(STOKES_SRCS))
 CHT_OBJS      := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(CHT_SRCS))
 AXIADJ_OBJS   := $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(AXIADJ_SRCS))
@@ -78,11 +81,12 @@ TEST_STOKES := $(BUILD)/test_stokes
 TEST_BRINK  := $(BUILD)/test_brinkman
 TEST_CHT   := $(BUILD)/test_cht
 TEST_TRIADJ := $(BUILD)/test_triple_adjoint_fd
+TEST_DISSADJ := $(BUILD)/test_dissipation_adjoint_fd
 COOLING_JACKET := $(BUILD)/cooling_jacket
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
-all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TOPOPT) $(METALLIB)
+all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TOPOPT) $(METALLIB)
 
 # --- link rules ---
 $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
@@ -135,6 +139,10 @@ $(TEST_CHT): $(CHT_OBJS) $(OBJ)/test_cht.o
 $(TEST_TRIADJ): $(OBJ)/fem/H8Element.o $(TRIADJ_OBJS) $(OBJ)/test_triple_adjoint_fd.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+# CPU-pure: dissipated-power (Borrvall-Petersson) adjoint gate (Phase 5R) — FD < 1e-4.
+$(TEST_DISSADJ): $(OBJ)/fem/H8Element.o $(DISSADJ_OBJS) $(OBJ)/test_dissipation_adjoint_fd.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 # CPU-pure: end-to-end multiphysics TO demo (Phase 5) — MMA + TripleAdjoint +
 # 3D density filter + Heaviside continuation. Produces output/cooling_jacket.vti.
 $(COOLING_JACKET): $(CPU_OBJS) $(TRIADJ_OBJS) $(OBJ)/apps/cooling_jacket.o
@@ -172,6 +180,7 @@ test: all
 	./$(TEST_BRINK)
 	./$(TEST_CHT)
 	./$(TEST_TRIADJ)
+	./$(TEST_DISSADJ)
 	./$(TEST_TH)
 	./$(TEST_TE)
 	./$(TEST_CG)
@@ -179,7 +188,7 @@ test: all
 	./$(TEST_MBB)
 
 # CPU-only checks (no GPU / no metallib needed).
-test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ)
+test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ)
 	./$(TEST_FEM)
 	./$(TEST_MG)
 	./$(TEST_ADJ)
@@ -192,6 +201,7 @@ test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA
 	./$(TEST_BRINK)
 	./$(TEST_CHT)
 	./$(TEST_TRIADJ)
+	./$(TEST_DISSADJ)
 
 run: $(TOPOPT) $(METALLIB)
 	./$(TOPOPT) mbb
@@ -217,5 +227,6 @@ clean:
 	rm -rf $(OBJ) $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) \
 	       $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) \
 	       $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) \
-	       $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(COOLING_JACKET) \
+	       $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) \
+	       $(COOLING_JACKET) \
 	       $(TOPOPT) $(METAL_AIR) $(METALLIB)
