@@ -5,6 +5,7 @@ Last updated: 2026-06-28
 - `topopt::StokesSolver` — src/physics/StokesSolver.hpp — Stokes Q1-Q1 PSPG + Brinkman α(γ)u (saddle-point, Eigen direct)
 - `topopt::CHTSolver` — src/physics/CHTSolver.hpp — advection-diffusion (conjugate heat transfer) + SUPG, non-symétrique
 - `topopt::TripleAdjoint` — src/adjoint/TripleAdjoint.hpp — adjoint triple-couplé Stokes-CHT-élastique (validé DF)
+- `cooling_jacket` (app) — src/apps/cooling_jacket.cpp — démonstrateur TO multiphysique end-to-end (MMA+Heaviside+TripleAdjoint)
 
 ## Classes / Structs (Phase 4)
 - `topopt::gpu::ThermalSolver` — src/physics/ThermalSolver.hpp — conduction GPU matrix-free (−div(k∇T)=q)

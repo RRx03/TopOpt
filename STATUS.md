@@ -1,7 +1,7 @@
 # Status — 2026-06-29
 
 ## Current focus
-**Phase 5 (TRÈS CRITIQUE)** : Stokes + CHT, adjoint triple-couplé. Session 1 faite.
+**Phase 5 CLÔTURÉE** (TRÈS CRITIQUE) : TO multiphysique fluide-structure-thermique.
 
 ## Décisions actées
 - ADR-017 : éléments **Q1-Q1 + PSPG** (pas Taylor-Hood) — cohérence grille structurée.
@@ -24,10 +24,19 @@
    Le cœur scientifique (TO multiphysique fluide-structure-thermique par adjoint)
    est validé de bout en bout.
 
-## Next up (brief Phase 5)
-2. (différé GPU) Solveur saddle-point itératif MINRES/Uzawa — production ; le direct
-   Eigen suffit pour les oracles CPU. À porter avec le GPU.
-6. Heaviside + intégration MMA. 7. Cooling jacket tuyère. 8. Clôture.
+## Phase 5 — complète
+6. ✅ **Démonstrateur TO multiphysique** (`cooling_jacket`) : MMA + filtre 3D +
+   Heaviside + gradient TripleAdjoint validé. J −71% convergé, volume actif,
+   quasi-binaire (gris 0.056), **ratio fluide col/extrémités 2.16×**. VTK ParaView.
+   → **Cœur scientifique validé de bout en bout.**
+
+## Next : Phase 6 (à arbitrer) + différés
+→ `../orchestration/handoffs/PHASE_5_TO_6.md`, `../orchestration/prompts/PHASE_6_BRIEF.md`.
+Recommandation : solder d'abord les différés « recruteur » (contraintes cooling jacket
+réelles + vraie tuyère + comparaison Borrvall-Petersson) avant de choisir A/B/C.
+
+Différés (report §7) : contraintes spécifiques (T_max/ΔP/von Mises, chacune un adjoint
+DF), vraie géométrie tuyère, adjoint SUPG, portage GPU.
 
 ## Note
 - Couche limite pression O(h) du PSPG égal-ordre près des bords ∇p≠0 : propriété
