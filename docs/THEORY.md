@@ -235,8 +235,20 @@ avant d'être utilisée :
 Un adjoint faux peut produire un design qui *semble* converger mais est aberrant.
 **Règle absolue** : avant tout usage, chaque gradient adjoint est comparé aux
 **différences finies centrées** sur un petit cas, élément par élément. Tolérance
-`< 1e-3` (souvent atteinte à `1e-6`–`1e-9`). Sept gates adjoints ont été franchis :
-compliance, stress 3D, stress axisymétrique, **triple-couplé**, dissipation, T_max.
+`< 1e-3` (systématiquement atteinte à `1e-6`–`1e-9`). **Six gates adjoints** ont
+été franchis et vérifiés indépendamment :
+
+| Gate adjoint | Erreur DF max |
+|---|---|
+| compliance thermo-élastique (2 blocs) | 1.6e-6 |
+| stress von Mises p-norm 3D | 1.6e-7 |
+| stress axisymétrique | 2.7e-9 |
+| **triple-couplé** (Stokes-CHT-élastique) | **2.1e-7** |
+| dissipation visqueuse (TO fluide) | 7e-7 |
+| température de paroi T_max | 7.5e-8 |
+
+S'y ajoutent l'optimiseur MMA (validé à l'optimum analytique, 6.4e-14), les oracles
+analytiques des solveurs, et le marching cubes (aire/volume de sphère, 0.06 %).
 
 Subtilité capturée en cours de route (LL-009) : sur les éléments à gradient
 quasi-nul, l'erreur *relative* DF explose par simple arrondi ; on juge alors sur
@@ -295,6 +307,24 @@ multiphysiques est un travail de production ultérieur, à revalider contre le c
 CPU.*
 
 ---
+
+## 7 bis. Résultats concrets (démonstrateurs)
+
+- **MBB 3D** (Phases 2-3) : la poutre canonique de la communauté TO, en 3D sur GPU,
+  design en treillis, mesh-independent. STL exporté.
+- **Paroi sous pression axisymétrique** (Phase 4) : masse −53 % sous contrainte von
+  Mises, matière concentrée au rayon interne (pic de Lamé) et renforcée à l'endroit
+  du pic de charge.
+- **Cooling jacket multiphysique** (Phase 5) : le pipeline complet
+  fluide-structure-thermique optimisé par MMA + gradient triple-couplé validé ;
+  l'optimiseur **route le coolant vers le point chaud** (ratio de densité fluide
+  col/extrémités 2.16×). Export ParaView (densité, vitesse, température, déplacement).
+- **Diffuseur de Borrvall-Petersson** (validation littérature) : reproduction du
+  canal convergent lisse publié, dissipation 97 % meilleure que le design uniforme.
+
+Visualisation : export **STL** (marching cubes, surfaces lisses) pour la géométrie,
+et **VTK `.vti`** pour les champs (ouvrable dans ParaView — rendu 3D, coupes,
+iso-surfaces, colormaps de contrainte/température, sans moteur de rendu custom).
 
 ## 8. Limitations honnêtement documentées
 
