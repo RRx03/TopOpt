@@ -131,10 +131,29 @@ format ; le modélisateur et le rendu sont des outils indépendants autour de lu
 
 ---
 
-## 5. Feuille de route d'implémentation
-- **v1 (structurel)** : `meta/domain/material/bc(fixed,loads)/filter/optimize
-  (compliance|mass + volume)/output` → reproduit MBB depuis JSON.
-- **v2 (thermo-élastique)** : `physics:["thermal","elastic"]`, `bc.thermal`,
-  contraintes `vonmises`/`tmax`.
-- **v3 (fluide-thermique)** : `physics:["fluid","thermal","elastic"]`, `bc.flow`,
-  objectif `dissipation`, contrainte `dP` → cooling jacket depuis JSON.
+## 5. État d'implémentation — COMPLET (v1→v3)
+
+Le driver `topopt_run <problem.topopt.json>` couvre les trois niveaux de physique :
+
+| Version | Physique | Objectif/contraintes | Exemple | État |
+|---|---|---|---|---|
+| **v1** | structurel (GPU) | compliance/masse + volume | `examples/mbb3d.topopt.json` | ✅ (MBB reproduit, C=18.5) |
+| **v2** | thermo-élastique (CPU) | masse + von Mises | `examples/bracket_thermo.topopt.json` | ✅ (contrainte active) |
+| **v3** | fluide-thermique (CPU) | compliance + volume (cascade triple) | `examples/cooling_jacket.topopt.json` | ✅ (canaux au col 2.6×) |
+
+Gradients : les 6 adjoints validés par DF (compliance, stress, T_max, triple-couplé,
+dissipation). Convention densité : `γ=1` matière (v1/v2 structurel) ou `γ=1` fluide
+(v3, Brinkman) — documentée par dispatch.
+
+### Usage
+```
+./build/topopt_run <problem.topopt.json>
+# -> output/<name>/<name>.vti (density, vonMises, temperature, velocity, displacement)
+#    ouvrir dans ParaView : rendu 3D, coupes, iso-surfaces, colormaps
+```
+
+### Extensions différées (assemblage, pas de nouveau gate)
+- Contraintes combinées v3 (T_max + von Mises + ΔP simultanées) — les adjoints
+  existent, reste le câblage multi-contraintes.
+- Dispatch axisymétrique (`dim:"axi"`) vers la piste `FEM2DAxi`/tuyère profilée.
+- Modeleur interactif (au-delà de l'authoring JSON) — Phase 6 industrialisation.
