@@ -78,6 +78,7 @@ TEST_STOKES := $(BUILD)/test_stokes
 TEST_BRINK  := $(BUILD)/test_brinkman
 TEST_CHT   := $(BUILD)/test_cht
 TEST_TRIADJ := $(BUILD)/test_triple_adjoint_fd
+COOLING_JACKET := $(BUILD)/cooling_jacket
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
@@ -132,6 +133,11 @@ $(TEST_CHT): $(CHT_OBJS) $(OBJ)/test_cht.o
 
 # CPU-pure: TRIPLE-coupled adjoint gate (Phase 5, hardest) — FD oracle < 1e-3.
 $(TEST_TRIADJ): $(OBJ)/fem/H8Element.o $(TRIADJ_OBJS) $(OBJ)/test_triple_adjoint_fd.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# CPU-pure: end-to-end multiphysics TO demo (Phase 5) — MMA + TripleAdjoint +
+# 3D density filter + Heaviside continuation. Produces output/cooling_jacket.vti.
+$(COOLING_JACKET): $(CPU_OBJS) $(TRIADJ_OBJS) $(OBJ)/apps/cooling_jacket.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 $(TEST_CG): $(CPU_OBJS) $(GPU_OBJS) $(OBJ)/test_cg_gpu.o
@@ -211,5 +217,5 @@ clean:
 	rm -rf $(OBJ) $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) \
 	       $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) \
 	       $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) \
-	       $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TOPOPT) $(METAL_AIR) \
-	       $(METALLIB)
+	       $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(COOLING_JACKET) \
+	       $(TOPOPT) $(METAL_AIR) $(METALLIB)
