@@ -195,6 +195,25 @@ LL-004 car LL-002/003 étaient déjà pris.)*
   = conditionnement K explose
 - **Sweet spot** : α_max entre 1e3 et 1e5 selon viscosité
 - **Mitigation** : continuation progressive de α_max
+- **Nuance mesurée (2026-07-08, cas BP diffuseur)** : le sweet spot [1e3,1e5]
+  concerne le **conditionnement** (cas confiné type cooling_jacket). Pour un
+  écoulement **traversant** (entrée→sortie), l'élément **Q1-Q1 PSPG égal-ordre ne
+  conserve pas strictement la masse** à travers un saut de Brinkman fort →
+  l'optimiseur peut « cacher » l'écoulement (islanding, flux milieu→0). Là,
+  α_max doit rester **modéré (~50)** pour la conservation de masse. Un élément
+  mixte conservatif (Taylor-Hood) serait plus robuste à α_max élevé — c'est le
+  compromis assumé du choix Q1-Q1 (ADR-017). Voir LL-011.
+
+### LL-011 : Islanding / non-conservation de masse en TO fluide traversante (Phase 5R, 2026-07-08)
+- **Symptôme** : en TO fluide avec écoulement traversant, l'optimiseur crée un
+  design déconnecté (poches fluide séparées par un bouchon solide) avec flux
+  entrée ≫ flux milieu → Φ artificiellement annulé
+- **Cause** : (1) élément égal-ordre PSPG ne conserve pas exactement la masse à
+  fort Brinkman ; (2) sortie laissée libre → l'optimiseur exploite la fuite
+- **Leçon** : (1) imposer un profil de sortie flux-matché (comme Borrvall-Petersson) ;
+  (2) garder α_max modéré (conservation de masse avant conditionnement) ;
+  (3) symétriser ρ si le problème est symétrique (évite les minima locaux coudés)
+- **Vérification** : flux u_x entrée ≈ milieu ≈ sortie ; design connecté
 
 ### LL-LIT-005 : Checkerboarding sans filtre (Phase 1+)
 - **Description** : design en damiers ρ=0/ρ=1 alterné si filtre absent ou
