@@ -83,6 +83,7 @@ TEST_CHT   := $(BUILD)/test_cht
 TEST_TRIADJ := $(BUILD)/test_triple_adjoint_fd
 TEST_DISSADJ := $(BUILD)/test_dissipation_adjoint_fd
 COOLING_JACKET := $(BUILD)/cooling_jacket
+BP_DIFFUSER := $(BUILD)/bp_diffuser
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
@@ -146,6 +147,12 @@ $(TEST_DISSADJ): $(OBJ)/fem/H8Element.o $(DISSADJ_OBJS) $(OBJ)/test_dissipation_
 # CPU-pure: end-to-end multiphysics TO demo (Phase 5) — MMA + TripleAdjoint +
 # 3D density filter + Heaviside continuation. Produces output/cooling_jacket.vti.
 $(COOLING_JACKET): $(CPU_OBJS) $(TRIADJ_OBJS) $(OBJ)/apps/cooling_jacket.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# CPU-pure: Borrvall-Petersson diffuser reproduction (Phase 5R) — MMA +
+# DissipationAdjoint + 3D density filter + Brinkman continuation. Produces
+# output/bp_diffuser.vti and output/bp_diffuser.png.
+$(BP_DIFFUSER): $(CPU_OBJS) $(DISSADJ_OBJS) $(OBJ)/apps/bp_diffuser.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 $(TEST_CG): $(CPU_OBJS) $(GPU_OBJS) $(OBJ)/test_cg_gpu.o
@@ -228,5 +235,5 @@ clean:
 	       $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) \
 	       $(TEST_MMA) $(TEST_AXI) $(TEST_AXISADJ) $(TEST_STOKES) \
 	       $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) \
-	       $(COOLING_JACKET) \
+	       $(COOLING_JACKET) $(BP_DIFFUSER) \
 	       $(TOPOPT) $(METAL_AIR) $(METALLIB)
