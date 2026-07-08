@@ -9,6 +9,12 @@
 
 ---
 
+> ✅ **Phase 5 clôturée (2026-07-08)** : cœur scientifique (TO multiphysique
+> fluide-structure-thermique par adjoint) validé de bout en bout. Cf.
+> `TopOptP5/PHASE_5_REPORT.md`, `handoffs/PHASE_5_TO_6.md`. Recommandation : solder
+> les différés « recruteur » (contraintes cooling jacket, vraie tuyère, comparaison
+> Borrvall-Petersson) avant de choisir A/B/C.
+
 ## OBJECTIF SCIENTIFIQUE (à figer en fin de Phase 5)
 
 Étendre le démonstrateur multiphysique selon **une** des trois directions, en
