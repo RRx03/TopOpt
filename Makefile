@@ -92,12 +92,13 @@ TEST_TRIADJ := $(BUILD)/test_triple_adjoint_fd
 TEST_DISSADJ := $(BUILD)/test_dissipation_adjoint_fd
 TEST_TMAXADJ := $(BUILD)/test_tmax_adjoint_fd
 TEST_MC    := $(BUILD)/test_marching_cubes
+TEST_SPEC  := $(BUILD)/test_problemspec
 COOLING_JACKET := $(BUILD)/cooling_jacket
 BP_DIFFUSER := $(BUILD)/bp_diffuser
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
-all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXIMAP) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC) $(TOPOPT) $(METALLIB)
+all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXIMAP) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC) $(TEST_SPEC) $(TOPOPT) $(METALLIB)
 
 # --- link rules ---
 $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
@@ -170,6 +171,10 @@ $(TEST_TMAXADJ): $(OBJ)/fem/H8Element.o $(TMAXADJ_OBJS) $(OBJ)/test_tmax_adjoint
 $(TEST_MC): $(MC_OBJS) $(OBJ)/test_marching_cubes.o
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
+# CPU-pure header-only: the input-language (ProblemSpec + BCResolver).
+$(TEST_SPEC): $(OBJ)/test_problemspec.o
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 # CPU-pure: end-to-end multiphysics TO demo (Phase 5) — MMA + TripleAdjoint +
 # 3D density filter + Heaviside continuation. Produces output/cooling_jacket.vti.
 $(COOLING_JACKET): $(CPU_OBJS) $(TRIADJ_OBJS) $(OBJ)/apps/cooling_jacket.o
@@ -217,6 +222,7 @@ test: all
 	./$(TEST_DISSADJ)
 	./$(TEST_TMAXADJ)
 	./$(TEST_MC)
+	./$(TEST_SPEC)
 	./$(TEST_TH)
 	./$(TEST_TE)
 	./$(TEST_CG)
@@ -224,7 +230,7 @@ test: all
 	./$(TEST_MBB)
 
 # CPU-only checks (no GPU / no metallib needed).
-test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXIMAP) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC)
+test_cpu: $(TEST_FEM) $(TEST_MG) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXIMAP) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC) $(TEST_SPEC)
 	./$(TEST_FEM)
 	./$(TEST_MG)
 	./$(TEST_ADJ)
@@ -267,6 +273,6 @@ clean:
 	       $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) \
 	       $(TEST_MMA) $(TEST_AXI) $(TEST_AXIMAP) $(TEST_AXISADJ) \
 	       $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) \
-	       $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC) $(COOLING_JACKET) \
+	       $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC) $(TEST_SPEC) $(COOLING_JACKET) \
 	       $(BP_DIFFUSER) $(NOZZLE_AXI) $(NOZZLE_PROFILED) \
 	       $(TOPOPT) $(METAL_AIR) $(METALLIB)

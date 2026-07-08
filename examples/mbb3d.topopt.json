@@ -1,0 +1,20 @@
+{
+  "meta":   { "name": "mbb3d", "version": 1, "dim": "3d" },
+  "domain": { "grid": [60, 20, 20], "size_mm": [60, 20, 20], "geometry": "box" },
+  "material": { "E0": 1.0, "Emin": 1e-4, "nu": 0.3, "penal": 3.0 },
+  "physics": ["elastic"],
+  "bc": {
+    "fixed": [
+      { "face": "x-", "dof": "x" },
+      { "face": "z-", "dof": "z" },
+      { "edge": "x+,y-", "dof": "y" }
+    ],
+    "loads": [
+      { "edge": "x-,y+", "dof": "y", "value": -1.0 }
+    ]
+  },
+  "filter":  { "radius_mm": 1.5 },
+  "optimize": { "objective": "compliance", "constraints": [ { "type": "volume", "max": 0.3 } ],
+                "optimizer": "oc", "max_iter": 60 },
+  "output": { "dir": "output/mbb3d", "formats": ["vti","stl"], "fields": ["density"] }
+}
