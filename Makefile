@@ -94,11 +94,12 @@ TEST_TMAXADJ := $(BUILD)/test_tmax_adjoint_fd
 TEST_MC    := $(BUILD)/test_marching_cubes
 TEST_SPEC  := $(BUILD)/test_problemspec
 COOLING_JACKET := $(BUILD)/cooling_jacket
+TOPOPT_RUN := $(BUILD)/topopt_run
 BP_DIFFUSER := $(BUILD)/bp_diffuser
 TOPOPT     := $(BUILD)/topopt
 
 .PHONY: all test test_cpu run clean
-all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXIMAP) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC) $(TEST_SPEC) $(TOPOPT) $(METALLIB)
+all: $(TEST_HELLO) $(TEST_FEM) $(TEST_CG) $(TEST_MBB) $(TEST_MG) $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) $(TEST_MMA) $(TEST_AXI) $(TEST_AXIMAP) $(TEST_AXISADJ) $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC) $(TEST_SPEC) $(TOPOPT) $(TOPOPT_RUN) $(METALLIB)
 
 # --- link rules ---
 $(TEST_HELLO): $(GPU_CORE_OBJS) $(OBJ)/test_metal_hello.o
@@ -195,6 +196,10 @@ $(TEST_MBB): $(CPU_OBJS) $(GPU_OBJS) $(IO_OBJS) $(OBJ)/test_mbb3d.o
 $(TOPOPT): $(CPU_OBJS) $(GPU_OBJS) $(IO_OBJS) $(OBJ)/main.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
+# Input-language driver (JSON -> solve -> VTK/STL). GPU structural path.
+$(TOPOPT_RUN): $(CPU_OBJS) $(GPU_OBJS) $(IO_OBJS) $(MC_OBJS) $(OBJ)/apps/topopt_run.o
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
 $(TEST_MG): $(CPU_OBJS) $(OBJ)/test_multigrid.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
@@ -273,6 +278,6 @@ clean:
 	       $(TEST_TH) $(TEST_TE) $(TEST_ADJ) $(TEST_STR) $(TEST_SADJ) \
 	       $(TEST_MMA) $(TEST_AXI) $(TEST_AXIMAP) $(TEST_AXISADJ) \
 	       $(TEST_STOKES) $(TEST_BRINK) $(TEST_CHT) $(TEST_TRIADJ) \
-	       $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC) $(TEST_SPEC) $(COOLING_JACKET) \
+	       $(TEST_DISSADJ) $(TEST_TMAXADJ) $(TEST_MC) $(TEST_SPEC) $(COOLING_JACKET) $(TOPOPT_RUN) \
 	       $(BP_DIFFUSER) $(NOZZLE_AXI) $(NOZZLE_PROFILED) \
 	       $(TOPOPT) $(METAL_AIR) $(METALLIB)
