@@ -37,6 +37,7 @@ struct ProblemSpec {
         double value = 0.0;                     // load / pressure / Q / T
     };
     std::vector<BCEntry> fixed, loads, pressure, thermal, flow;
+    std::array<double, 3> body_force = {0.0, 0.0, 0.0};  // Stokes drive (bc.flow "drive")
 
     // filter
     double filter_radius_mm = 1.5;
@@ -113,7 +114,13 @@ struct ProblemSpec {
             if (b.contains("loads")) s.loads = parseList(b["loads"]);
             if (b.contains("pressure")) s.pressure = parseList(b["pressure"]);
             if (b.contains("thermal")) s.thermal = parseList(b["thermal"]);
-            if (b.contains("flow")) s.flow = parseList(b["flow"]);
+            if (b.contains("flow")) {
+                s.flow = parseList(b["flow"]);
+                // A flow entry may carry a body-force "drive" vector (coolant push).
+                for (const auto& e : b["flow"])
+                    if (e.contains("drive"))
+                        s.body_force = e["drive"].get<std::array<double, 3>>();
+            }
         }
         if (j.contains("filter")) {
             const auto& f = j["filter"];

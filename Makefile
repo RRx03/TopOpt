@@ -197,8 +197,9 @@ $(TOPOPT): $(CPU_OBJS) $(GPU_OBJS) $(IO_OBJS) $(OBJ)/main.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 # Input-language driver (JSON -> solve -> VTK/STL). GPU structural path (v1) +
-# CPU thermo-elastic mass-min stress-constrained path (v2, ADJ_OBJS).
-$(TOPOPT_RUN): $(CPU_OBJS) $(GPU_OBJS) $(ADJ_OBJS) $(IO_OBJS) $(MC_OBJS) $(OBJ)/apps/topopt_run.o
+# CPU thermo-elastic mass-min stress-constrained path (v2, ADJ_OBJS) +
+# CPU fluid-thermal-elastic compliance path (v3, TRIADJ_OBJS).
+$(TOPOPT_RUN): $(CPU_OBJS) $(GPU_OBJS) $(ADJ_OBJS) $(TRIADJ_OBJS) $(IO_OBJS) $(MC_OBJS) $(OBJ)/apps/topopt_run.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 $(TEST_MG): $(CPU_OBJS) $(OBJ)/test_multigrid.o

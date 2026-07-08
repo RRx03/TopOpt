@@ -6,6 +6,7 @@
 // v1: structural (compliance/mass minimization under a volume constraint) on the
 // GPU matrix-free path. v2/v3 (thermo, fluid) extend the physics dispatch.
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -16,6 +17,7 @@
 #include <Foundation/Foundation.hpp>
 
 #include "adjoint/ThermoElasticAdjoint.hpp"
+#include "adjoint/TripleAdjoint.hpp"
 #include "core/Grid3D.hpp"
 #include "fem/H8Element.hpp"
 #include "filter/Helmholtz3D.hpp"
@@ -298,6 +300,187 @@ int runThermoElastic(const ProblemSpec& s) {
     return 0;
 }
 
+// ===========================================================================
+// Fluid-thermal-elastic branch (CPU double, TripleAdjoint). Minimise compliance
+// J = Fmech^T U through the Stokes-Brinkman -> CHT -> thermo-elastic cascade,
+// s.t. a fluid-volume-fraction constraint. This drives the validated
+// cooling_jacket demonstrator (gradient DF 2.1e-7) entirely from JSON: only the
+// boundary conditions change, the loop is cooling_jacket.cpp verbatim.
+// CONVENTION: gamma = 1 fluid, gamma = 0 solid (inverse of the v1/v2 density
+// convention) -- consistent throughout TripleAdjoint and the volume constraint.
+// ===========================================================================
+int runFluidThermal(const ProblemSpec& s) {
+    Grid3D grid(s.grid[0], s.grid[1], s.grid[2]);
+    const int ne = grid.nElems();
+    const int nN = grid.nNodes();
+
+    // --- physics parameters from the spec. ---
+    TripleAdjoint::Params prm;
+    prm.mu = s.mu;
+    prm.alphaStab = 1.0 / 12.0;
+    prm.alphaMax = s.brinkman_max;   // Brinkman drag on solid cells (gamma=0)
+    prm.alphaMin = 0.0;
+    prm.qBrink = s.brinkman_q;
+    prm.ks = s.k_solid;              // solid conductivity (gamma=0)
+    prm.kf = s.k_fluid;              // fluid conductivity (gamma=1); advected heat
+    prm.E0 = s.E0;
+    prm.Emin = s.Emin;
+    prm.p = s.penal;
+    prm.alphaTh = s.alpha_th;
+    prm.Tref = s.Tref;
+    prm.nu = s.nu;
+
+    // --- boundary conditions from the input language. ---
+    // Stokes (4 DOF/node): no-slip walls / slip faces / pressure datum + drive.
+    const std::vector<int> stokesFixed = BCResolver::stokesFixedDofs(grid, s);
+    const std::array<double, 3> bodyForce = s.body_force;
+    // Thermal: homogeneous Dirichlet (T=0) node set + nodal heat source Q.
+    const std::vector<int> thermalNodes = BCResolver::thermalFixedNodes(grid, s);
+    std::vector<std::uint8_t> dirMask(static_cast<size_t>(nN), 0);
+    Vec dirVal = Vec::Zero(nN);
+    for (int n : thermalNodes) dirMask[static_cast<size_t>(n)] = 1;
+    const Vec Q = BCResolver::thermalSource(grid, s);
+    // Elastic: fixed-DOF list + mechanical load vector (v1 resolvers).
+    const auto fixedMask = BCResolver::fixedMask(grid, s);
+    std::vector<int> elasticFixed;
+    for (int d = 0; d < grid.nDof(); ++d)
+        if (fixedMask[static_cast<size_t>(d)]) elasticFixed.push_back(d);
+    const Vec Fmech = BCResolver::loadVector(grid, s);
+
+    TripleAdjoint adj(grid, prm, stokesFixed, bodyForce, dirMask, dirVal, Q,
+                      elasticFixed, Fmech);
+
+    // --- filter + Heaviside + MMA (cooling_jacket verbatim). ---
+    const double cell_mm = s.size_mm[0] / std::max(1, s.grid[0]);
+    DensityFilter3D filt(grid, s.filter_radius_mm / cell_mm);
+    const double eta = s.heaviside_eta;
+    const double vFrac = volumeConstraint(s);
+
+    MMAOptimizer::Params mp;
+    mp.move = 0.2;  // conservative move limit for a stiff multiphysics objective
+    MMAOptimizer mma(ne, 1, mp);
+    const Vec xmin = Vec::Constant(ne, 0.0), xmax = Vec::Ones(ne);
+    Vec rho = Vec::Constant(ne, vFrac);  // start at the fluid budget
+
+    std::printf(
+        "topopt_run '%s' [fluid-thermal-elastic]: %dx%dx%d (%d elems, Stokes "
+        "DOF=%d), obj=compliance, fluidVol<=%.2f, %d iter\n",
+        s.name.c_str(), s.grid[0], s.grid[1], s.grid[2], ne, 4 * nN, vFrac,
+        s.max_iter);
+    std::printf("  BCs: %zu Stokes fixed DOF, drive=[%.1f,%.1f,%.1f], %zu thermal "
+                "Dirichlet nodes, |Q|=%.3e, %zu elastic fixed DOF, |Fmech|=%.3e\n",
+                stokesFixed.size(), bodyForce[0], bodyForce[1], bodyForce[2],
+                thermalNodes.size(), Q.norm(), elasticFixed.size(), Fmech.norm());
+    std::printf("%4s %8s %10s %6s %8s %7s %9s\n", "it", "J", "J/Jref", "beta",
+                "fluid", "gVol", "gray");
+
+    double Jref = 0.0, J = 0.0, fluidFrac = 0.0, gVol = 0.0, gray = 0.0,
+           J_first = 0.0;
+    for (int it = 1; it <= s.max_iter; ++it) {
+        const double beta = betaAt(s, it);
+        const Vec rhoTil = filt.apply(rho);
+        Vec gamma(ne), dHdT(ne);
+        for (int e = 0; e < ne; ++e) {
+            gamma(e) = heaviside(rhoTil(e), beta, eta);
+            dHdT(e) = dHeaviside(rhoTil(e), beta, eta);
+        }
+
+        const auto sol = adj.solve(gamma);
+        J = sol.J;
+        if (it == 1) { Jref = std::fabs(J) > 1e-30 ? std::fabs(J) : 1.0; J_first = J; }
+
+        // Objective chain: dJ/drho = W^T ( dH/drho_tilde .* dJ/dgamma ).
+        Vec dJdT(ne);
+        for (int e = 0; e < ne; ++e) dJdT(e) = sol.grad(e) * dHdT(e);
+        const Vec df0 = filt.applyT(dJdT) / Jref;
+
+        // Volume constraint: mean(gamma) / vFrac - 1 <= 0 (gamma = fluid).
+        fluidFrac = gamma.mean();
+        gVol = fluidFrac / vFrac - 1.0;
+        Vec dVdT(ne);
+        for (int e = 0; e < ne; ++e) dVdT(e) = (1.0 / ne) * dHdT(e) / vFrac;
+        const Vec dgVol = filt.applyT(dVdT);
+
+        Vec fvals(1); fvals(0) = gVol;
+        Eigen::MatrixXd dfdx(1, ne); dfdx.row(0) = dgVol.transpose();
+
+        rho = mma.step(rho, J / Jref, df0, fvals, dfdx, xmin, xmax);
+
+        int ng = 0;
+        for (int e = 0; e < ne; ++e)
+            if (gamma(e) > 0.1 && gamma(e) < 0.9) ++ng;
+        gray = double(ng) / ne;
+
+        if (it == 1 || it % 5 == 0 || it == s.max_iter)
+            std::printf("%4d %8.3e %10.4f %6.0f %8.4f %+7.4f %8.3f\n", it, J,
+                        J / Jref, beta, fluidFrac, gVol, gray);
+    }
+
+    // --- final fields (recompute at final beta for reporting/export). ---
+    const double betaF = betaAt(s, s.max_iter);
+    const Vec rhoTil = filt.apply(rho);
+    Vec gamma(ne);
+    for (int e = 0; e < ne; ++e) gamma(e) = heaviside(rhoTil(e), betaF, eta);
+    const auto sol = adj.solve(gamma);
+
+    Vec speed = Vec::Zero(nN), umag = Vec::Zero(nN);
+    for (int n = 0; n < nN; ++n) {
+        const double ux = sol.w(4 * n + 0), uy = sol.w(4 * n + 1),
+                     uz = sol.w(4 * n + 2);
+        speed(n) = std::sqrt(ux * ux + uy * uy + uz * uz);
+        const double dx = sol.U(3 * n + 0), dy = sol.U(3 * n + 1),
+                     dz = sol.U(3 * n + 2);
+        umag(n) = std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
+    const Vec speedC = nodalScalarToCell(grid, speed);
+    const Vec tempC = nodalScalarToCell(grid, sol.T);
+    const Vec umagC = nodalScalarToCell(grid, umag);
+
+    std::filesystem::create_directories(s.output_dir);
+    const std::string base = s.output_dir + "/" + s.name;
+    VTKExporter::writeImageData(base + ".vti", grid,
+                                {{"density", &gamma},
+                                 {"speed", &speedC},
+                                 {"temperature", &tempC},
+                                 {"displacement", &umagC}});
+
+    // --- sanity metrics. ---
+    fluidFrac = gamma.mean();
+    int ng = 0;
+    for (int e = 0; e < ne; ++e)
+        if (gamma(e) > 0.1 && gamma(e) < 0.9) ++ng;
+    gray = double(ng) / ne;
+
+    const int nx = grid.nelx(), ny = grid.nely(), nz = grid.nelz();
+    auto bandFluid = [&](int k0, int k1) {
+        double sm = 0.0; int c = 0;
+        for (int ez = k0; ez < k1; ++ez)
+            for (int ey = 0; ey < ny; ++ey)
+                for (int ex = 0; ex < nx; ++ex) { sm += gamma(grid.elemId(ex, ey, ez)); ++c; }
+        return c > 0 ? sm / c : 0.0;
+    };
+    const int band = 3;
+    const double fThroat = bandFluid(nz / 2 - band, nz / 2 + band);
+    const double fEnds = 0.5 * (bandFluid(0, band) + bandFluid(nz - band, nz));
+
+    std::printf("\n==== %s (fluid-thermal-elastic) summary ====\n", s.name.c_str());
+    std::printf("J: first=%.4e  final=%.4e  (ratio %.3f)\n", J_first, sol.J,
+                sol.J / (std::fabs(J_first) > 1e-30 ? J_first : 1.0));
+    std::printf("fluid fraction = %.4f  (target %.2f, gVol=%+.4f) -> %s\n",
+                fluidFrac, vFrac, fluidFrac / vFrac - 1.0,
+                std::fabs(fluidFrac / vFrac - 1.0) < 0.05 ? "CONSTRAINT ACTIVE"
+                                                          : "constraint slack");
+    std::printf("grey fraction (gamma in [0.1,0.9]) = %.3f\n", gray);
+    std::printf("fluid density: throat=%.3f  ends=%.3f  ratio=%.2f -> %s\n",
+                fThroat, fEnds, fThroat / std::max(fEnds, 1e-9),
+                (fThroat > 1.1 * fEnds) ? "MORE FLUID AT THROAT"
+                                        : "no clear throat concentration");
+    std::printf("max coolant speed = %.4f   T range [%.4f, %.4f]\n",
+                adj.maxSpeed(sol.w), sol.T.minCoeff(), sol.T.maxCoeff());
+    std::printf("wrote %s.vti\n", base.c_str());
+    return 0;
+}
+
 int runStructural(const ProblemSpec& s) {
     NS::AutoreleasePool* pool = NS::AutoreleasePool::alloc()->init();
     Grid3D grid(s.grid[0], s.grid[1], s.grid[2]);
@@ -398,13 +581,16 @@ int main(int argc, char** argv) {
     };
     const bool onlyElastic = spec.physics.size() == 1 && spec.physics[0] == "elastic";
     if (spec.dim == "3d" && onlyElastic) return runStructural(spec);
+    // v3 fluid-thermal-elastic: full Stokes-Brinkman -> CHT -> thermo-elastic.
+    if (spec.dim == "3d" && has("fluid") && has("thermal") && has("elastic"))
+        return runFluidThermal(spec);
     // v2 thermo-elastic: thermal + elastic (and no fluid).
     if (spec.dim == "3d" && has("thermal") && has("elastic") && !has("fluid"))
         return runThermoElastic(spec);
     std::fprintf(stderr,
-                 "topopt_run supports dim=3d physics=[elastic] (v1) and "
-                 "[thermal,elastic] (v2); got dim=%s physics[0]=%s. Fluid "
-                 "dispatch is v3.\n",
+                 "topopt_run supports dim=3d physics=[elastic] (v1), "
+                 "[thermal,elastic] (v2) and [fluid,thermal,elastic] (v3); got "
+                 "dim=%s physics[0]=%s.\n",
                  spec.dim.c_str(), spec.physics.empty() ? "?" : spec.physics[0].c_str());
     return 3;
 }

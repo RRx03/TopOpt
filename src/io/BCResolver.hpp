@@ -24,6 +24,7 @@ public:
     // Faces: "x-","x+","y-","y+","z-","z+". Edge: two comma-separated faces
     // (their intersection). Node "corner:x+,y-,z-": three faces (a corner).
     static std::vector<int> selectNodes(const Grid3D& g, const ProblemSpec::BCEntry& e) {
+        if (!e.region.empty()) return selectRegion(g, e.region);
         std::vector<std::string> faces;
         if (!e.face.empty()) faces = {e.face};
         else if (!e.edge.empty()) faces = split(e.edge);
@@ -97,7 +98,63 @@ public:
         return Q;
     }
 
+    // --- Stokes boundary conditions (incompressible flow, 4 DOF/node) ----------
+    // DOF layout dof(n,c) = 4n+c: c in {0,1,2} = velocity (u_x,u_y,u_z), c=3 =
+    // pressure. Resolves bc.flow selectors into the fixed-DOF list the triple
+    // adjoint constrains (homogeneous, i.e. u=0 / p=0):
+    //   dof "wall"/"noslip" -> no-slip, fix all three velocity components;
+    //   dof "slip"          -> fix the velocity component normal to the face;
+    //   dof "pressure"/"p"  -> pin the pressure datum on the selected node(s);
+    //   a "drive" entry (body force) carries no dof and is skipped here.
+    static int stokesDof(int n, int c) { return 4 * n + c; }
+
+    static std::vector<int> stokesFixedDofs(const Grid3D& g, const ProblemSpec& s) {
+        std::vector<int> dofs;
+        for (const auto& e : s.flow) {
+            if (e.dof.empty()) continue;  // drive / unlabelled entries
+            const auto nodes = selectNodes(g, e);
+            if (e.dof == "wall" || e.dof == "noslip") {
+                for (int n : nodes)
+                    for (int c = 0; c < 3; ++c) dofs.push_back(stokesDof(n, c));
+            } else if (e.dof == "slip") {
+                const int c = faceNormal(e.face);
+                if (c >= 0)
+                    for (int n : nodes) dofs.push_back(stokesDof(n, c));
+            } else if (e.dof == "pressure" || e.dof == "p" || e.dof == "pdatum") {
+                for (int n : nodes) dofs.push_back(stokesDof(n, 3));
+            }
+        }
+        std::sort(dofs.begin(), dofs.end());
+        dofs.erase(std::unique(dofs.begin(), dofs.end()), dofs.end());
+        return dofs;
+    }
+
 private:
+    // Region selector "axis:lo:hi" (node indices, inclusive), axis in {x,y,z}.
+    // Enables an interior volumetric source (e.g. a mid-height heat band) that
+    // face/edge/node selectors cannot reach.
+    static std::vector<int> selectRegion(const Grid3D& g, const std::string& r) {
+        std::vector<int> nodes;
+        const auto tok = split(r, ':');
+        if (tok.size() != 3 || tok[0].empty()) return nodes;
+        const char axis = tok[0][0];
+        const int lo = std::stoi(tok[1]), hi = std::stoi(tok[2]);
+        for (int k = 0; k <= g.nelz(); ++k)
+            for (int j = 0; j <= g.nely(); ++j)
+                for (int i = 0; i <= g.nelx(); ++i) {
+                    const int idx = (axis == 'x') ? i : (axis == 'y') ? j : k;
+                    if (idx >= lo && idx <= hi) nodes.push_back(g.nodeId(i, j, k));
+                }
+        return nodes;
+    }
+
+    static int faceNormal(const std::string& f) {
+        if (f == "x-" || f == "x+") return 0;
+        if (f == "y-" || f == "y+") return 1;
+        if (f == "z-" || f == "z+") return 2;
+        return -1;
+    }
+
     static std::vector<std::string> split(const std::string& s, char sep = ',') {
         std::vector<std::string> out;
         std::string cur;

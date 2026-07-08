@@ -1,0 +1,39 @@
+{
+  "meta":   { "name": "cooling_jacket", "version": 1, "dim": "3d" },
+  "domain": { "grid": [12, 12, 20], "size_mm": [12, 12, 20], "geometry": "box" },
+  "material": {
+    "E0": 1.0, "Emin": 1e-4, "nu": 0.3, "penal": 3.0,
+    "k_solid": 1.0, "k_fluid": 0.3, "alpha_th": 1.5e-2, "Tref": 0.0,
+    "mu": 1.0, "brinkman_max": 500.0, "brinkman_q": 0.1
+  },
+  "physics": ["fluid", "thermal", "elastic"],
+  "bc": {
+    "flow": [
+      { "face": "x-", "dof": "wall" },
+      { "face": "x+", "dof": "wall" },
+      { "face": "y-", "dof": "slip" },
+      { "face": "y+", "dof": "slip" },
+      { "node": "corner:x-,y-,z-", "dof": "pressure" },
+      { "drive": [0.0, 0.0, 30.0] }
+    ],
+    "thermal": [
+      { "face": "z-", "dof": "T", "value": 0.0 },
+      { "face": "z+", "dof": "T", "value": 0.0 },
+      { "region": "z:8:12", "dof": "Q", "value": 3000.0 }
+    ],
+    "fixed": [
+      { "face": "z-", "dof": "all" }
+    ],
+    "loads": [
+      { "face": "z+", "dof": "z", "value": 1.69 }
+    ]
+  },
+  "filter":  { "radius_mm": 1.5, "heaviside": { "beta": [1, 2, 4, 8, 16], "eta": 0.5 } },
+  "optimize": {
+    "objective": "compliance",
+    "constraints": [ { "type": "volume", "max": 0.40 } ],
+    "optimizer": "mma",
+    "max_iter": 60
+  },
+  "output": { "dir": "output/cooling_jacket", "formats": ["vti"], "fields": ["density"] }
+}
