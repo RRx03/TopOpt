@@ -5,6 +5,8 @@
 
 #include <Eigen/SparseLU>
 
+#include "topopt/StressModel.hpp"
+
 namespace topopt {
 
 namespace {
@@ -573,6 +575,177 @@ TripleAdjoint::Solution TripleAdjoint::solve(const Vec& gamma) const {
             }
 
     sol.grad = sol.termStokes + sol.termThermal + sol.termElastic;
+    return sol;
+}
+
+// ---- von Mises p-norm objective through the triple cascade (GATE A2) --------
+// Solidity s = 1 - gamma; sigma_e = s_e^q * vm0_e with vm0 the UNIT-MODULUS
+// (E = 1) solid centroid von Mises. Documented choice: sigma0 does not carry
+// E(gamma), so the only explicit gamma dependence is the s^q relaxation; the
+// E(gamma) dependence of the ACTUAL stress state is captured implicitly through
+// U (elastic hereditary term of the adjoint).
+double TripleAdjoint::stressObjective(const Vec& gamma,
+                                      const StressParams& sp) const {
+    Vec w, T, U;
+    forward(gamma, w, T, U);
+    const StressModel sm(prm_.nu, sp.q, sp.P);
+    const Vec vm0 = sm.vonMisesSolid(grid_, U);
+    const Vec solidity = (1.0 - gamma.array()).matrix();
+    return sm.pNorm(sm.relaxedStress(solidity, vm0));
+}
+
+TripleAdjoint::StressSolution
+TripleAdjoint::solveStress(const Vec& gamma, const StressParams& sp) const {
+    StressSolution sol;
+
+    // --- forward cascade, operators kept for the transposed adjoints (same
+    // bricks and same order as solve(); solve() itself is left untouched).
+    SpMat A;
+    Vec f;
+    buildStokes(gamma, A, f);
+    const Vec wr = sparseLUsolve(A, f);
+    sol.w = expandVec(wr, sMap_, 4 * grid_.nNodes());
+
+    const Vec vel3 = velocity3(sol.w);
+    const SpMat Kt = buildThermalFull(gamma, vel3);
+    Vec lift = Vec::Zero(grid_.nNodes());
+    for (int n = 0; n < grid_.nNodes(); ++n)
+        if (dirMaskT_[static_cast<size_t>(n)]) lift(n) = dirValT_(n);
+    const SpMat KtR = reduceMat(Kt, tMap_, nFreeT_);
+    const Vec rhsT = reduceVec(thermalSource() - Kt * lift, tMap_, nFreeT_);
+    const Vec Tr = sparseLUsolve(KtR, rhsT);
+    sol.T = lift;
+    for (int n = 0; n < grid_.nNodes(); ++n)
+        if (tMap_[static_cast<size_t>(n)] >= 0)
+            sol.T(n) = Tr(tMap_[static_cast<size_t>(n)]);
+
+    const SpMat Ke = buildElasticFull(gamma);
+    const SpMat KeR = reduceMat(Ke, eMap_, nFreeE_);
+    const Vec rhsE = reduceVec(Fmech_ + thermalLoad(gamma, sol.T), eMap_, nFreeE_);
+    const Vec Ur = sparseLUsolve(KeR, rhsE);
+    sol.U = expandVec(Ur, eMap_, grid_.nDof());
+
+    // --- objective, explicit term and adjoint seed dJ/dU ---------------------
+    const StressModel sm(prm_.nu, sp.q, sp.P);
+    const auto& S0 = sm.S0();
+    const H8Element::Mat6 Vsym =
+        0.5 * (sm.V() + H8Element::Mat6(sm.V().transpose()));
+
+    sol.vm0 = sm.vonMisesSolid(grid_, sol.U);
+    const Vec solidity = (1.0 - gamma.array()).matrix();
+    const Vec sigma = sm.relaxedStress(solidity, sol.vm0);
+    const double sigPN = sm.pNorm(sigma);
+    sol.J = sigPN;
+
+    const int nEl = grid_.nElems();
+    const double vmFloor = 1e-12;  // guard vm0 ~ 0 in dvm0/du = (1/vm0) S0^T V s
+
+    // dJ/dsigma_e = sigPN^(1-P) sigma_e^(P-1).
+    Vec dJdsig(nEl);
+    for (int e = 0; e < nEl; ++e)
+        dJdsig(e) = std::pow(sigPN, 1.0 - sp.P) * std::pow(sigma(e), sp.P - 1.0);
+
+    // dJ/dU (scattered) and explicit relaxation term
+    //   dsigma_e/dg = d(s^q)/dg * vm0 = -q s^(q-1) vm0   (ds/dg = -1).
+    Vec dJdU = Vec::Zero(grid_.nDof());
+    sol.termExplicit = Vec::Zero(nEl);
+    for (int ez = 0; ez < grid_.nelz(); ++ez)
+        for (int ey = 0; ey < grid_.nely(); ++ey)
+            for (int ex = 0; ex < grid_.nelx(); ++ex) {
+                const int eid = grid_.elemId(ex, ey, ez);
+                const auto dofs = grid_.elementDofs(ex, ey, ez);
+                Eigen::Matrix<double, 24, 1> ue;
+                for (int a = 0; a < 24; ++a)
+                    ue(a) = sol.U(dofs[static_cast<size_t>(a)]);
+
+                const double s = std::max(solidity(eid), 0.0);
+                const double sq = std::pow(s, sp.q);
+
+                if (sol.vm0(eid) > vmFloor) {
+                    const Eigen::Matrix<double, 6, 1> sv = S0 * ue;
+                    const Eigen::Matrix<double, 24, 1> dsig_du =
+                        (sq / sol.vm0(eid)) * (S0.transpose() * (Vsym * sv));
+                    const double wgt = dJdsig(eid);
+                    for (int a = 0; a < 24; ++a)
+                        dJdU(dofs[static_cast<size_t>(a)]) += wgt * dsig_du(a);
+                }
+
+                // s^(q-1) diverges for q<1 at s=0: floor s (LL-008).
+                const double sEps = std::max(s, 1e-9);
+                sol.termExplicit(eid) = -dJdsig(eid) * sp.q *
+                                        std::pow(sEps, sp.q - 1.0) *
+                                        sol.vm0(eid);
+            }
+
+    // --- adjoint cascade: STRUCTURE of solve(), seed = -dJ_sigma/dU ----------
+    // 1. K_e^T le = -dJ/dU  (K_e SPD -> same operator).
+    const Vec lamEr = sparseLUsolve(KeR, reduceVec(-dJdU, eMap_, nFreeE_));
+    const Vec lamE = expandVec(lamEr, eMap_, grid_.nDof());
+
+    // 2. K_t^T lt = G^T le.
+    const SpMat KtRT = SpMat(KtR.transpose());
+    const Vec lamTr = sparseLUsolve(
+        KtRT, reduceVec(thermalAdjointRhs(gamma, lamE), tMap_, nFreeT_));
+    const Vec lamT = expandVec(lamTr, tMap_, grid_.nNodes());
+
+    // 3. A^T ls = -(dRt/du)^T lt.
+    const SpMat AT = SpMat(A.transpose());
+    const Vec lamSr = sparseLUsolve(
+        AT, reduceVec(stokesAdjointRhs(sol.T, lamT), sMap_, nFreeS_));
+    const Vec lamS = expandVec(lamSr, sMap_, 4 * grid_.nNodes());
+
+    // --- hereditary gradient terms (identical structure to solve()) ----------
+    sol.termStokes = Vec::Zero(nEl);
+    sol.termThermal = Vec::Zero(nEl);
+    sol.termElastic = Vec::Zero(nEl);
+
+    for (int ez = 0; ez < grid_.nelz(); ++ez)
+        for (int ey = 0; ey < grid_.nely(); ++ey)
+            for (int ex = 0; ex < grid_.nelx(); ++ex) {
+                const int eid = grid_.elemId(ex, ey, ez);
+                const auto nodes = grid_.elementNodes(ex, ey, ez);
+                const auto dofs = grid_.elementDofs(ex, ey, ez);
+                const double gv = clamp01(gamma(eid));
+
+                // Elastic: dE [ le^T KE0 U - alpha_th le^T Cth (T - Tref) ].
+                Eigen::Matrix<double, 24, 1> Ue, lE;
+                for (int a = 0; a < 24; ++a) {
+                    Ue(a) = sol.U(dofs[static_cast<size_t>(a)]);
+                    lE(a) = lamE(dofs[static_cast<size_t>(a)]);
+                }
+                Eigen::Matrix<double, 8, 1> Te, lT, dTe;
+                for (int a = 0; a < 8; ++a) {
+                    const int na = nodes[static_cast<size_t>(a)];
+                    Te(a) = sol.T(na);
+                    lT(a) = lamT(na);
+                    dTe(a) = sol.T(na) - prm_.Tref;
+                }
+                const double dE = dYoungE(gv);
+                sol.termElastic(eid) =
+                    dE * ((lE.transpose() * ke0_ * Ue)(0, 0) -
+                          prm_.alphaTh * (lE.transpose() * (cth_ * dTe))(0, 0));
+
+                // Thermal: dk * lt^T L0 T   (advection is gamma-independent).
+                const double dk = prm_.kf - prm_.ks;
+                sol.termThermal(eid) = dk * (lT.transpose() * l0_ * Te)(0, 0);
+
+                // Stokes: dalpha * sum_c ls_u[c]^T M_vel w_u[c].
+                const double da = dAlpha(gv);
+                double ts = 0.0;
+                for (int c = 0; c < 3; ++c) {
+                    Eigen::Matrix<double, 8, 1> wc, lc;
+                    for (int a = 0; a < 8; ++a) {
+                        const int nd = 4 * nodes[static_cast<size_t>(a)] + c;
+                        wc(a) = sol.w(nd);
+                        lc(a) = lamS(nd);
+                    }
+                    ts += (lc.transpose() * mvel_ * wc)(0, 0);
+                }
+                sol.termStokes(eid) = da * ts;
+            }
+
+    sol.grad = sol.termExplicit + sol.termStokes + sol.termThermal +
+               sol.termElastic;
     return sol;
 }
 

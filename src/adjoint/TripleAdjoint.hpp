@@ -79,11 +79,44 @@ public:
                   const Vec& thermalDirVal, const Vec& Q,
                   const std::vector<int>& elasticFixedDofs, const Vec& Fmech);
 
+    // --- von Mises p-norm objective through the SAME triple cascade ----------
+    // (GATE A2). Solidity s_e = 1 - gamma_e (v3 convention: gamma=1 fluid).
+    // Solid centroid stress sigma0_e = sqrt((S0 u_e)^T V (S0 u_e)) with S0 the
+    // unit-modulus (E = 1) centroid stress matrix — sigma0 does NOT carry E(g):
+    // all explicit gamma dependence sits in the qp relaxation
+    //   sigma_e = s_e^q * sigma0_e ,  J_sigma = (sum_e sigma_e^P)^(1/P).
+    // Gradient = explicit relaxation term  dJ/dsigma_e * d(s^q)/dg * sigma0_e
+    // (d s/dg = -1) + the SAME inverse cascade as solve(), only the elastic
+    // adjoint seed changes: K_e le = -dJ_sigma/dU instead of -Fmech.
+    struct StressParams {
+        double q = 0.5;  // qp-relaxation exponent (< SIMP p)
+        double P = 8.0;  // p-norm aggregation exponent
+    };
+
+    struct StressSolution {
+        Vec w;   // Stokes solution (4*nNodes)
+        Vec T;   // nodal temperature (nNodes)
+        Vec U;   // nodal displacement (nDof)
+        double J = 0.0;   // sigma p-norm
+        Vec vm0;          // solid (unrelaxed) von Mises per element
+        Vec grad;         // dJ_sigma/dgamma (nElems)
+        Vec termExplicit; // relaxation: dJ/dsig * d(s^q)/dg * sigma0
+        Vec termStokes;   // ls^T (dA/dg) w
+        Vec termThermal;  // lt^T (dKt/dg) T
+        Vec termElastic;  // le^T[(dKe/dg)U - dF_th/dg]
+    };
+
     // Full forward cascade -> J = Fmech^T U (used by the FD oracle).
     double objective(const Vec& gamma) const;
 
     // Forward + the three discrete adjoint solves + gradient.
     Solution solve(const Vec& gamma) const;
+
+    // Full forward cascade -> J_sigma (von Mises p-norm FD oracle).
+    double stressObjective(const Vec& gamma, const StressParams& sp) const;
+
+    // Forward + inverse cascade seeded by -dJ_sigma/dU + gradient.
+    StressSolution solveStress(const Vec& gamma, const StressParams& sp) const;
 
     // Peak nodal speed of the current Stokes solution (diagnostic / Peclet).
     double maxSpeed(const Vec& w) const;
