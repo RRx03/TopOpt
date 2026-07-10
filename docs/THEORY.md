@@ -235,7 +235,7 @@ avant d'être utilisée :
 Un adjoint faux peut produire un design qui *semble* converger mais est aberrant.
 **Règle absolue** : avant tout usage, chaque gradient adjoint est comparé aux
 **différences finies centrées** sur un petit cas, élément par élément. Tolérance
-`< 1e-3` (systématiquement atteinte à `1e-6`–`1e-9`). **Six gates adjoints** ont
+`< 1e-3` (systématiquement atteinte à `1e-6`–`1e-9`). **Sept gates adjoints** ont
 été franchis et vérifiés indépendamment :
 
 | Gate adjoint | Erreur DF max |
@@ -246,6 +246,14 @@ Un adjoint faux peut produire un design qui *semble* converger mais est aberrant
 | **triple-couplé** (Stokes-CHT-élastique) | **2.1e-7** |
 | dissipation visqueuse (TO fluide) | 7e-7 |
 | température de paroi T_max | 7.5e-8 |
+| von Mises à travers la cascade triple | 8.0e-7 |
+
+Le dernier illustre la modularité de la cascade inverse : même machinerie que le
+gate triple-couplé, seul le semis change (`∂J_σ/∂U` au lieu de `F_mech`), la
+relaxation qp portant sur la solidité `s = 1−γ` (convention fluide de la v3).
+Il permet d'imposer **quatre contraintes simultanées** (volume, T_max, ΔP,
+von Mises) dans l'optimisation fluide-thermique — toutes actives à convergence
+sur le démonstrateur cooling jacket.
 
 S'y ajoutent l'optimiseur MMA (validé à l'optimum analytique, 6.4e-14), les oracles
 analytiques des solveurs, et le marching cubes (aire/volume de sphère, 0.06 %).

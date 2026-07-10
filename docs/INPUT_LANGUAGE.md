@@ -140,10 +140,19 @@ Le driver `topopt_run <problem.topopt.json>` couvre les trois niveaux de physiqu
 | **v1** | structurel (GPU) | compliance/masse + volume | `examples/mbb3d.topopt.json` | ✅ (MBB reproduit, C=18.5) |
 | **v2** | thermo-élastique (CPU) | masse + von Mises | `examples/bracket_thermo.topopt.json` | ✅ (contrainte active) |
 | **v3** | fluide-thermique (CPU) | compliance + volume (cascade triple) | `examples/cooling_jacket.topopt.json` | ✅ (canaux au col 2.6×) |
+| **v3 multi** | fluide-thermique, m≥2 contraintes | + `tmax`, `dissipation`, `vonmises` combinées | `examples/cooling_jacket_multi.topopt.json`, `cooling_jacket_full.topopt.json` | ✅ (4 contraintes actives) |
 
-Gradients : les 6 adjoints validés par DF (compliance, stress, T_max, triple-couplé,
-dissipation). Convention densité : `γ=1` matière (v1/v2 structurel) ou `γ=1` fluide
-(v3, Brinkman) — documentée par dispatch.
+Gradients : les 7 adjoints validés par DF (compliance, stress 3D, stress axi,
+T_max, triple-couplé, dissipation, **von Mises via cascade triple** 8.0e-7).
+Convention densité : `γ=1` matière (v1/v2 structurel) ou `γ=1` fluide (v3,
+Brinkman) — documentée par dispatch.
+
+Types de contraintes v3 (`optimize.constraints[].type`) : `volume`, `tmax`,
+`dissipation`, `vonmises` — normalisées `g = val/max − 1 ≤ 0`, combinables
+librement (MMA dual Newton m≥2). Sur `cooling_jacket_full`, les quatre sont
+simultanément actives à convergence (bornes calibrées : un couple T_max/σ trop
+serré est physiquement inatteignable — les canaux qui refroidissent amincissent
+les ligaments porteurs ; le compromis est documenté dans l'exemple).
 
 ### Usage
 ```
@@ -152,8 +161,8 @@ dissipation). Convention densité : `γ=1` matière (v1/v2 structurel) ou `γ=1`
 #    ouvrir dans ParaView : rendu 3D, coupes, iso-surfaces, colormaps
 ```
 
-### Extensions différées (assemblage, pas de nouveau gate)
-- Contraintes combinées v3 (T_max + von Mises + ΔP simultanées) — les adjoints
-  existent, reste le câblage multi-contraintes.
-- Dispatch axisymétrique (`dim:"axi"`) vers la piste `FEM2DAxi`/tuyère profilée.
-- Modeleur interactif (au-delà de l'authoring JSON) — Phase 6 industrialisation.
+### Extensions différées
+- Dispatch axisymétrique (`dim:"axi"`) vers la piste `FEM2DAxi`/tuyère profilée
+  (assemblage, briques validées).
+- Modeleur interactif web (au-delà de l'authoring JSON) — cahier des charges à venir.
+- Portage GPU des adjoints multiphysiques (perf/échelle, pas de capacité nouvelle).
