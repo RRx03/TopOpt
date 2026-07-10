@@ -11,11 +11,14 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include <Foundation/Foundation.hpp>
 
+#include "adjoint/DissipationAdjoint.hpp"
+#include "adjoint/ThermalObjectiveAdjoint.hpp"
 #include "adjoint/ThermoElasticAdjoint.hpp"
 #include "adjoint/TripleAdjoint.hpp"
 #include "core/Grid3D.hpp"
@@ -303,11 +306,19 @@ int runThermoElastic(const ProblemSpec& s) {
 // ===========================================================================
 // Fluid-thermal-elastic branch (CPU double, TripleAdjoint). Minimise compliance
 // J = Fmech^T U through the Stokes-Brinkman -> CHT -> thermo-elastic cascade,
-// s.t. a fluid-volume-fraction constraint. This drives the validated
-// cooling_jacket demonstrator (gradient DF 2.1e-7) entirely from JSON: only the
-// boundary conditions change, the loop is cooling_jacket.cpp verbatim.
+// s.t. m >= 1 constraints built from the JSON spec:
+//   volume       g = mean(gamma)/max - 1        (fluid-volume budget)
+//   tmax         g = J_T/max - 1                (ThermalObjectiveAdjoint,
+//                                                p-norm wall temperature, P=8)
+//   dissipation  g = Phi/max - 1                (DissipationAdjoint, 1/2 w^T H w)
+//   vonmises     g = J_sigma/max - 1            (TripleAdjoint::solveStress,
+//                                                qp-relaxed von Mises p-norm,
+//                                                q=0.5, P=8, sigma on solid s=1-gamma)
+// All adjoints are DF-validated gates; each gradient is chained through the
+// SAME dH/drho_tilde .* (.) -> filter^T pipeline as the objective. With a
+// single volume constraint this reproduces the v3 cooling_jacket run exactly.
 // CONVENTION: gamma = 1 fluid, gamma = 0 solid (inverse of the v1/v2 density
-// convention) -- consistent throughout TripleAdjoint and the volume constraint.
+// convention) -- consistent throughout the three adjoints and the constraints.
 // ===========================================================================
 int runFluidThermal(const ProblemSpec& s) {
     Grid3D grid(s.grid[0], s.grid[1], s.grid[2]);
@@ -350,32 +361,93 @@ int runFluidThermal(const ProblemSpec& s) {
     TripleAdjoint adj(grid, prm, stokesFixed, bodyForce, dirMask, dirVal, Q,
                       elasticFixed, Fmech);
 
-    // --- filter + Heaviside + MMA (cooling_jacket verbatim). ---
+    // --- constraint set from the input language (m >= 1). ---
+    // Types: volume / tmax / dissipation / vonmises, all normalised
+    // g = val/max - 1 <= 0. "vonmises" runs the full triple cascade a second
+    // time per iteration through TripleAdjoint::solveStress (gate
+    // test_vm_triple_fd, 8.0e-7) -- accepted demo cost.
+    struct ConstraintDef { std::string type; double bound; };
+    std::vector<ConstraintDef> cons;
+    for (const auto& c : s.constraints) {
+        if (c.type == "volume" || c.type == "tmax" || c.type == "dissipation" ||
+            c.type == "vonmises") {
+            if (c.max <= 0.0) {
+                std::fprintf(stderr,
+                             "fluid-thermal: constraint '%s' needs max > 0 "
+                             "(got %g)\n", c.type.c_str(), c.max);
+                return 1;
+            }
+            cons.push_back({c.type, c.max});
+        } else {
+            std::fprintf(stderr,
+                         "fluid-thermal: unknown constraint type '%s' "
+                         "(supported: volume, tmax, dissipation, vonmises)\n",
+                         c.type.c_str());
+            return 1;
+        }
+    }
+    if (cons.empty()) cons.push_back({"volume", 0.5});  // legacy default
+    const int m = static_cast<int>(cons.size());
+
+    // Secondary-physics adjoints: instantiate ONCE (they precompute element
+    // operators and reduced-DOF maps); one solve per constraint per iteration.
+    // Same resolved BCs as TripleAdjoint; their Params are subsets of prm.
+    // "vonmises" needs no extra object: TripleAdjoint::solveStress reuses adj.
+    const TripleAdjoint::StressParams stressPrm;  // q=0.5, P=8 (gate defaults)
+    std::unique_ptr<ThermalObjectiveAdjoint> tmaxAdj;
+    std::unique_ptr<DissipationAdjoint> dissAdj;
+    for (const auto& c : cons) {
+        if (c.type == "tmax" && !tmaxAdj) {
+            ThermalObjectiveAdjoint::Params tp;
+            tp.mu = prm.mu; tp.alphaStab = prm.alphaStab;
+            tp.alphaMax = prm.alphaMax; tp.alphaMin = prm.alphaMin;
+            tp.qBrink = prm.qBrink; tp.ks = prm.ks; tp.kf = prm.kf;
+            tmaxAdj = std::make_unique<ThermalObjectiveAdjoint>(
+                grid, tp, stokesFixed, bodyForce, dirMask, dirVal, Q);
+        } else if (c.type == "dissipation" && !dissAdj) {
+            DissipationAdjoint::Params dp;
+            dp.mu = prm.mu; dp.alphaStab = prm.alphaStab;
+            dp.alphaMax = prm.alphaMax; dp.alphaMin = prm.alphaMin;
+            dp.qBrink = prm.qBrink;
+            // Body-force drive, homogeneous velocity Dirichlet -> zero lift.
+            dissAdj = std::make_unique<DissipationAdjoint>(
+                grid, dp, stokesFixed, bodyForce, Vec::Zero(4 * nN));
+        }
+    }
+
+    // --- filter + Heaviside + MMA (cooling_jacket verbatim, m constraints). ---
     const double cell_mm = s.size_mm[0] / std::max(1, s.grid[0]);
     DensityFilter3D filt(grid, s.filter_radius_mm / cell_mm);
     const double eta = s.heaviside_eta;
-    const double vFrac = volumeConstraint(s);
+    double vFrac = 0.5;  // rho seed = fluid budget when a volume constraint exists
+    for (const auto& c : cons) if (c.type == "volume") vFrac = c.bound;
 
     MMAOptimizer::Params mp;
     mp.move = 0.2;  // conservative move limit for a stiff multiphysics objective
-    MMAOptimizer mma(ne, 1, mp);
+    MMAOptimizer mma(ne, m, mp);
     const Vec xmin = Vec::Constant(ne, 0.0), xmax = Vec::Ones(ne);
     Vec rho = Vec::Constant(ne, vFrac);  // start at the fluid budget
 
     std::printf(
         "topopt_run '%s' [fluid-thermal-elastic]: %dx%dx%d (%d elems, Stokes "
-        "DOF=%d), obj=compliance, fluidVol<=%.2f, %d iter\n",
-        s.name.c_str(), s.grid[0], s.grid[1], s.grid[2], ne, 4 * nN, vFrac,
+        "DOF=%d), obj=compliance, m=%d, %d iter\n",
+        s.name.c_str(), s.grid[0], s.grid[1], s.grid[2], ne, 4 * nN, m,
         s.max_iter);
+    std::printf("  constraints:");
+    for (const auto& c : cons)
+        std::printf(" %s<=%.4g", c.type.c_str(), c.bound);
+    std::printf("\n");
     std::printf("  BCs: %zu Stokes fixed DOF, drive=[%.1f,%.1f,%.1f], %zu thermal "
                 "Dirichlet nodes, |Q|=%.3e, %zu elastic fixed DOF, |Fmech|=%.3e\n",
                 stokesFixed.size(), bodyForce[0], bodyForce[1], bodyForce[2],
                 thermalNodes.size(), Q.norm(), elasticFixed.size(), Fmech.norm());
-    std::printf("%4s %8s %10s %6s %8s %7s %9s\n", "it", "J", "J/Jref", "beta",
-                "fluid", "gVol", "gray");
+    std::printf("%4s %8s %10s %6s %8s", "it", "J", "J/Jref", "beta", "fluid");
+    for (const auto& c : cons) std::printf(" %9.9s", ("g:" + c.type).c_str());
+    std::printf(" %7s\n", "gray");
 
-    double Jref = 0.0, J = 0.0, fluidFrac = 0.0, gVol = 0.0, gray = 0.0,
-           J_first = 0.0;
+    double Jref = 0.0, J = 0.0, fluidFrac = 0.0, gray = 0.0, J_first = 0.0;
+    Vec fvals(m), cRaw(m);  // normalised g_i and raw constraint values
+    Eigen::MatrixXd dfdx(m, ne);
     for (int it = 1; it <= s.max_iter; ++it) {
         const double beta = betaAt(s, it);
         const Vec rhoTil = filt.apply(rho);
@@ -394,15 +466,36 @@ int runFluidThermal(const ProblemSpec& s) {
         for (int e = 0; e < ne; ++e) dJdT(e) = sol.grad(e) * dHdT(e);
         const Vec df0 = filt.applyT(dJdT) / Jref;
 
-        // Volume constraint: mean(gamma) / vFrac - 1 <= 0 (gamma = fluid).
+        // Constraints g_i = val_i/max_i - 1 <= 0; gradients chained through the
+        // SAME dH .* (.) -> filter^T pipeline as the objective.
         fluidFrac = gamma.mean();
-        gVol = fluidFrac / vFrac - 1.0;
-        Vec dVdT(ne);
-        for (int e = 0; e < ne; ++e) dVdT(e) = (1.0 / ne) * dHdT(e) / vFrac;
-        const Vec dgVol = filt.applyT(dVdT);
-
-        Vec fvals(1); fvals(0) = gVol;
-        Eigen::MatrixXd dfdx(1, ne); dfdx.row(0) = dgVol.transpose();
+        for (int i = 0; i < m; ++i) {
+            const double bound = cons[static_cast<size_t>(i)].bound;
+            const std::string& type = cons[static_cast<size_t>(i)].type;
+            Vec dGdT(ne);
+            if (type == "volume") {
+                cRaw(i) = fluidFrac;
+                for (int e = 0; e < ne; ++e)
+                    dGdT(e) = (1.0 / ne) * dHdT(e) / bound;
+            } else if (type == "tmax") {
+                const auto st = tmaxAdj->solve(gamma);
+                cRaw(i) = st.J;
+                for (int e = 0; e < ne; ++e)
+                    dGdT(e) = st.grad(e) * dHdT(e) / bound;
+            } else if (type == "vonmises") {
+                const auto sv = adj.solveStress(gamma, stressPrm);
+                cRaw(i) = sv.J;
+                for (int e = 0; e < ne; ++e)
+                    dGdT(e) = sv.grad(e) * dHdT(e) / bound;
+            } else {  // dissipation
+                const auto sd = dissAdj->solve(gamma);
+                cRaw(i) = sd.Phi;
+                for (int e = 0; e < ne; ++e)
+                    dGdT(e) = sd.grad(e) * dHdT(e) / bound;
+            }
+            fvals(i) = cRaw(i) / bound - 1.0;
+            dfdx.row(i) = filt.applyT(dGdT).transpose();
+        }
 
         rho = mma.step(rho, J / Jref, df0, fvals, dfdx, xmin, xmax);
 
@@ -411,9 +504,12 @@ int runFluidThermal(const ProblemSpec& s) {
             if (gamma(e) > 0.1 && gamma(e) < 0.9) ++ng;
         gray = double(ng) / ne;
 
-        if (it == 1 || it % 5 == 0 || it == s.max_iter)
-            std::printf("%4d %8.3e %10.4f %6.0f %8.4f %+7.4f %8.3f\n", it, J,
-                        J / Jref, beta, fluidFrac, gVol, gray);
+        if (it == 1 || it % 5 == 0 || it == s.max_iter) {
+            std::printf("%4d %8.3e %10.4f %6.0f %8.4f", it, J, J / Jref, beta,
+                        fluidFrac);
+            for (int i = 0; i < m; ++i) std::printf(" %+9.4f", fvals(i));
+            std::printf(" %7.3f\n", gray);
+        }
     }
 
     // --- final fields (recompute at final beta for reporting/export). ---
@@ -466,10 +562,29 @@ int runFluidThermal(const ProblemSpec& s) {
     std::printf("\n==== %s (fluid-thermal-elastic) summary ====\n", s.name.c_str());
     std::printf("J: first=%.4e  final=%.4e  (ratio %.3f)\n", J_first, sol.J,
                 sol.J / (std::fabs(J_first) > 1e-30 ? J_first : 1.0));
-    std::printf("fluid fraction = %.4f  (target %.2f, gVol=%+.4f) -> %s\n",
-                fluidFrac, vFrac, fluidFrac / vFrac - 1.0,
-                std::fabs(fluidFrac / vFrac - 1.0) < 0.05 ? "CONSTRAINT ACTIVE"
-                                                          : "constraint slack");
+
+    // Per-constraint report on the final design (forward-only re-evaluation).
+    std::string activeSet;
+    for (int i = 0; i < m; ++i) {
+        const auto& c = cons[static_cast<size_t>(i)];
+        double val = 0.0;
+        if (c.type == "volume") val = fluidFrac;
+        else if (c.type == "tmax") val = tmaxAdj->objective(gamma);
+        else if (c.type == "vonmises") val = adj.stressObjective(gamma, stressPrm);
+        else val = dissAdj->objective(gamma);
+        const double g = val / c.bound - 1.0;
+        const char* status = (g > 0.05)              ? "VIOLATED"
+                             : (std::fabs(g) < 0.05) ? "ACTIVE"
+                                                     : "slack";
+        if (std::fabs(g) < 0.05) {
+            if (!activeSet.empty()) activeSet += ", ";
+            activeSet += c.type;
+        }
+        std::printf("constraint %-12s val=%.4e  max=%.4e  g=%+.4f -> %s\n",
+                    c.type.c_str(), val, c.bound, g, status);
+    }
+    std::printf("active set: {%s}\n",
+                activeSet.empty() ? "empty" : activeSet.c_str());
     std::printf("grey fraction (gamma in [0.1,0.9]) = %.3f\n", gray);
     std::printf("fluid density: throat=%.3f  ends=%.3f  ratio=%.2f -> %s\n",
                 fThroat, fEnds, fThroat / std::max(fEnds, 1e-9),

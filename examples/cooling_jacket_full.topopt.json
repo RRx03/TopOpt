@@ -1,0 +1,45 @@
+{
+  "meta":   { "name": "cooling_jacket_full", "version": 1, "dim": "3d" },
+  "domain": { "grid": [12, 12, 20], "size_mm": [12, 12, 20], "geometry": "box" },
+  "material": {
+    "E0": 1.0, "Emin": 1e-4, "nu": 0.3, "penal": 3.0,
+    "k_solid": 1.0, "k_fluid": 0.3, "alpha_th": 1.5e-2, "Tref": 0.0,
+    "mu": 1.0, "brinkman_max": 500.0, "brinkman_q": 0.1
+  },
+  "physics": ["fluid", "thermal", "elastic"],
+  "bc": {
+    "flow": [
+      { "face": "x-", "dof": "wall" },
+      { "face": "x+", "dof": "wall" },
+      { "face": "y-", "dof": "slip" },
+      { "face": "y+", "dof": "slip" },
+      { "node": "corner:x-,y-,z-", "dof": "pressure" },
+      { "drive": [0.0, 0.0, 30.0] }
+    ],
+    "thermal": [
+      { "face": "z-", "dof": "T", "value": 0.0 },
+      { "face": "z+", "dof": "T", "value": 0.0 },
+      { "region": "z:8:12", "dof": "Q", "value": 3000.0 }
+    ],
+    "fixed": [
+      { "face": "z-", "dof": "all" }
+    ],
+    "loads": [
+      { "face": "z+", "dof": "z", "value": 1.69 }
+    ]
+  },
+  "filter":  { "radius_mm": 1.5, "heaviside": { "beta": [1, 2, 4, 8, 16], "eta": 0.5 } },
+  "optimize": {
+    "objective": "compliance",
+    "_comment": "Bounds calibrated against free values probed with slack constraints: J_T free = 17.54, Phi free = 5.81e4, J_sigma free = 0.1247 on the volume-only design (q=0.5, P=8, solidity s=1-gamma). tmax and vonmises CONFLICT physically: cooling channels near the z:8:12 heat source thin the solid ligaments and raise the stress p-norm (J_sigma free grows to 0.216 under tmax=13, and vonmises<=0.16 is then unattainable -- verified by trial runs). The feasible four-active compromise: tmax=16.0 (~9% below free) relaxed vs cooling_jacket_multi to leave stress margin, dissipation=4.0e4 (~31% below free), vonmises=0.15 (~25-30% below the stress free value of the tmax-constrained design). All FOUR constraints end ACTIVE at convergence.",
+    "constraints": [
+      { "type": "volume",      "max": 0.40 },
+      { "type": "tmax",        "max": 16.0 },
+      { "type": "dissipation", "max": 4.0e4 },
+      { "type": "vonmises",    "max": 0.15 }
+    ],
+    "optimizer": "mma",
+    "max_iter": 60
+  },
+  "output": { "dir": "output/cooling_jacket_full", "formats": ["vti"], "fields": ["density"] }
+}
