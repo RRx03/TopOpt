@@ -1,0 +1,24 @@
+# Build artifacts
+build/
+*.o
+*.air
+*.metallib
+*.dSYM
+
+# macOS
+.DS_Store
+
+# Vendored dependencies (heavy, not versioned at root)
+shared/third_party/
+
+# Phase directories have their own git repos (baseline snapshots)
+TopOptP1/
+TopOptP2/
+TopOptP3/
+TopOptP4/
+TopOptP5/
+
+# Deprecated personal versions and scratch metal-cpp copy
+V1 (deprecated)/
+V2 (deprecated)/
+metal-cpp/
