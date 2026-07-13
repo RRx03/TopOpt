@@ -141,6 +141,7 @@ Le driver `topopt_run <problem.topopt.json>` couvre les trois niveaux de physiqu
 | **v2** | thermo-élastique (CPU) | masse + von Mises | `examples/bracket_thermo.topopt.json` | ✅ (contrainte active) |
 | **v3** | fluide-thermique (CPU) | compliance + volume (cascade triple) | `examples/cooling_jacket.topopt.json` | ✅ (canaux au col 2.6×) |
 | **v3 multi** | fluide-thermique, m≥2 contraintes | + `tmax`, `dissipation`, `vonmises` combinées | `examples/cooling_jacket_multi.topopt.json`, `cooling_jacket_full.topopt.json` | ✅ (4 contraintes actives) |
+| **axi** | axisymétrique (CPU, Q4 r-z) | masse + von Mises (`max_rel`) | `examples/nozzle_profiled.topopt.json` | ✅ (démonstrateur reproduit exactement) |
 
 Gradients : les 7 adjoints validés par DF (compliance, stress 3D, stress axi,
 T_max, triple-couplé, dissipation, **von Mises via cascade triple** 8.0e-7).
@@ -161,8 +162,16 @@ les ligaments porteurs ; le compromis est documenté dans l'exemple).
 #    ouvrir dans ParaView : rendu 3D, coupes, iso-surfaces, colormaps
 ```
 
+### Schéma axi (`dim:"axi"`)
+- `grid[0]=nr` (radial), `grid[1]=nz` (axial) ; `size_mm[1]=H`. L'axe r=0 n'est
+  jamais maillé. `geometry:"nozzle"` : bande design r_in(z) ≤ r ≤ r_in(z)+wall
+  avec r_in(z)=r_throat+K(z−H/2)², depuis `domain.nozzle {r_throat, K, wall}` ;
+  `geometry:"box"` : anneau [a,b] avec a=size_mm[0], b=size_mm[2].
+- `bc.fixed` faces z± dof "z" → plane strain ; `bc.pressure` face "inner" →
+  charge profilée sur l'alésage, piquée à la gorge.
+- `constraints[].max_rel` : borne relative au design solide (σ_lim = max_rel·σ_PN(ρ=1)) ;
+  prioritaire sur `max`.
+
 ### Extensions différées
-- Dispatch axisymétrique (`dim:"axi"`) vers la piste `FEM2DAxi`/tuyère profilée
-  (assemblage, briques validées).
 - Modeleur interactif web (au-delà de l'authoring JSON) — cahier des charges à venir.
 - Portage GPU des adjoints multiphysiques (perf/échelle, pas de capacité nouvelle).
