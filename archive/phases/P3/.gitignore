@@ -1,0 +1,15 @@
+.DS_Store
+build/
+*.o
+*.d
+*.air
+*.metallib
+*.dSYM
+__pycache__/
+.venv/
+*.pyc
+xcuserdata/
+DerivedData/
+
+# Generated optimization outputs (STL, logs)
+output/
