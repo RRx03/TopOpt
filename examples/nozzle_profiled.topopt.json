@@ -1,0 +1,28 @@
+{
+  "meta":   { "name": "nozzle_profiled", "version": 1, "dim": "axi" },
+  "domain": {
+    "grid": [24, 80, 1],
+    "size_mm": [0.6, 4.0, 1.3],
+    "geometry": "nozzle",
+    "nozzle": { "r_throat": 0.6, "K": 0.20, "wall": 0.70 }
+  },
+  "material": { "E0": 1.0, "Emin": 1e-4, "nu": 0.3, "penal": 3.0 },
+  "physics": ["elastic"],
+  "bc": {
+    "fixed": [
+      { "face": "z-", "dof": "z" },
+      { "face": "z+", "dof": "z" }
+    ],
+    "pressure": [
+      { "face": "inner", "value": 4.0 }
+    ]
+  },
+  "filter": { "radius_mm": 0.1, "heaviside": { "beta": [1, 2, 3, 4], "eta": 0.5 } },
+  "optimize": {
+    "objective": "mass",
+    "constraints": [ { "type": "vonmises", "max_rel": 1.6 } ],
+    "optimizer": "mma",
+    "max_iter": 80
+  },
+  "output": { "dir": "output/nozzle_profiled", "formats": ["vti", "stl"], "fields": ["density"] }
+}
