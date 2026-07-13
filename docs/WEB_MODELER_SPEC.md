@@ -1,0 +1,127 @@
+# Cahier des charges — Modeleur web de contraintes 3D (TopOpt Studio)
+
+*Draft v0.1 — à itérer. L'outil web est un **producteur/consommateur du contrat
+`.topopt.json`** (cf. `INPUT_LANGUAGE.md`) : il n'embarque aucune physique.*
+
+---
+
+## 1. Vision
+
+Une application web (statique, zéro installation) où l'utilisateur :
+
+1. **modélise** un problème de TO dans une scène 3D — domaine, résolution,
+   conditions aux limites par clic sur les faces, matériau, objectif, contraintes ;
+2. **exporte** le `.topopt.json` (ou le rejoue : import round-trip) ;
+3. **exécute** le solveur en local (`topopt_run problem.topopt.json`) ;
+4. **visualise** les résultats (`.vti`, `.stl`) dans le viewer intégré.
+
+```
+┌─────────────── TopOpt Studio (navigateur) ───────────────┐
+│  Éditeur 3D (three.js)      Viewer résultats (vtk.js)    │
+│  scène + picking faces  →   .vti (density, vM, T, u)     │
+│  panneaux BC/matériau       coupes, iso-surfaces, cmaps  │
+└───────────┬───────────────────────────▲──────────────────┘
+            │ .topopt.json (export)     │ .vti/.stl (import)
+            ▼                           │
+        topopt_run (CLI, local) ────────┘
+```
+
+**Positionnement** : ParaView reste l'outil d'analyse avancée ; le viewer intégré
+vise la boucle courte auteur→résultat et la démo (lien partageable).
+
+## 2. Périmètre
+
+### MVP (M1–M3)
+- Domaine **box 3D** : grid (nelx,nely,nelz), size_mm, aperçu du maillage.
+- **Sélection** de faces (x±, y±, z±), arêtes (intersection de 2 faces), coins ;
+  surbrillance au survol, code couleur par type de BC.
+- **BCs élastiques** : appuis (`fixed` par composante ou `all`), charges (`loads`
+  force totale + direction), glyphes 3D (flèches, encastrements).
+- **Formulaires** matériau / filtre / optimize (objectif, contraintes avec types
+  autorisés selon la physique, optimiseur, max_iter) — défauts = ceux de
+  `ProblemSpec` (source de vérité).
+- **Validation en continu** : physique choisie ⇒ types de contraintes/objectifs
+  admissibles (matrice de compatibilité §4) ; erreurs bloquantes à l'export.
+- **Export/Import** `.topopt.json` round-trip sans perte.
+- **Viewer vtk.js** : chargement du `.vti` produit, iso-surface à seuil réglable,
+  coupes orthogonales, colormaps par champ, chargement `.stl`.
+
+### V2
+- Physiques v2/v3 dans l'UI : BCs thermiques (Dirichlet T, sources Q par face ou
+  région `axis:lo:hi`), flow (no-slip, slip, datum pression, drive), multi-contraintes.
+- Mode **axisymétrique** : édition du profil r_in(z) (r_throat, K, wall) avec
+  aperçu 2D (r,z) + révolution 3D live.
+- Presets : les 6 exemples du repo chargeables en un clic (galerie).
+
+### V3 / différé
+- Wrapper local optionnel (petit serveur HTTP autour de `topopt_run`) pour un
+  bouton « Run » sans quitter le navigateur ; suivi de convergence (parse stdout).
+- Régions de design/non-design peintes ; multi-matériaux ; import CAD. **Non-buts MVP.**
+
+## 3. Choix techniques
+
+| Sujet | Choix | Justification |
+|---|---|---|
+| Rendu scène | **three.js** | picking faces trivial (raycaster), écosystème, léger |
+| Viewer résultats | **vtk.js** | lit nativement `.vti` (VTK XML ImageData), iso/coupes fournis |
+| Langage | **TypeScript** | le schéma ProblemSpec typé = le contrat compilé |
+| Build | **Vite** | app statique, dev server instantané, déploiement = fichiers |
+| UI panels | à trancher : vanilla + lil-gui (léger) **ou** React (si l'UI grossit) |
+| État | un seul objet `ProblemSpec` TS, single source of truth, undo/redo par snapshots |
+| Backend | **aucun** en MVP (app 100 % statique, hébergeable GitHub Pages) |
+
+## 4. Le contrat (exigences dures)
+
+- Le type TS `ProblemSpec` **reflète exactement** `src/io/ProblemSpec.hpp`
+  (mêmes champs, mêmes défauts). Tout écart = bug. Un test de golden files
+  compare l'export UI aux 6 exemples du repo (sémantiquement identiques).
+- Matrice de compatibilité (à générer depuis la doc, maintenue à la main en MVP) :
+
+| physics | objectifs | contraintes admissibles |
+|---|---|---|
+| elastic (3d) | compliance, mass | volume, vonmises |
+| thermal+elastic | mass | volume, vonmises |
+| fluid+thermal+elastic | compliance | volume, tmax, dissipation, vonmises (combinables) |
+| elastic (axi, nozzle) | mass | vonmises (`max_rel`) |
+
+- Conventions affichées à l'écran (pièges connus du projet) : γ=1 fluide en v3
+  vs ρ=1 matière ailleurs ; l'axe r=0 hors domaine en axi ; force = totale
+  distribuée sur la sélection.
+
+## 5. Jalons & critères d'acceptation
+
+| Jalon | Livrable | Critère d'acceptation |
+|---|---|---|
+| **M1 — Auteur box** | éditeur 3D + BCs élastiques + export | reconstruire `mbb3d.topopt.json` **entièrement à la souris** ; le solveur donne C=18.5216 identique |
+| **M2 — Round-trip & validation** | import + matrice de compat + presets | importer les 6 exemples, les rééditer, les re-exporter sans perte |
+| **M3 — Viewer** | vtk.js intégré | charger `cooling_jacket_full.vti`, iso-surface density=0.5, coupe + colormap T |
+| **M4 — Physiques v2/v3** | BCs thermiques/flow + multi-contraintes | reconstruire `cooling_jacket_full.topopt.json` à la souris, 4 contraintes |
+| **M5 — Axi** | éditeur de profil + révolution | reconstruire `nozzle_profiled.topopt.json`, PNG/STL identiques |
+
+Chaque jalon = démo enregistrable. M1–M3 ≈ MVP présentable.
+
+## 6. Risques
+
+- **Dérive du contrat** : le schéma évolue côté C++ sans l'UI → golden tests M2
+  en CI + version de schéma dans `meta.version`.
+- **Volumétrie .vti** : grilles fines (128³ ≈ 8 Mo/champ) — vtk.js tient, mais
+  prévoir le chargement champ par champ.
+- **Picking ambigu** (faces internes, arêtes) : limiter le MVP aux 6 faces + arêtes
+  franches, comme les sélecteurs actuels de `BCResolver`.
+- **Sur-ingénierie UI** : pas de framework tant que lil-gui suffit (décision §3 à
+  confirmer au premier prototype).
+
+## 7. Arborescence prévue
+
+```
+web/
+├── index.html
+├── src/
+│   ├── spec/        # types ProblemSpec + défauts + validation + compat
+│   ├── editor/      # scène three.js, picking, glyphes BC
+│   ├── panels/      # formulaires (matériau, optimize, output)
+│   ├── viewer/      # vtk.js (.vti/.stl)
+│   └── presets/     # les 6 exemples embarqués
+├── tests/           # golden round-trip vs ../examples/*.topopt.json
+└── vite.config.ts
+```
