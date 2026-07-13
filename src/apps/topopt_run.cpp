@@ -17,22 +17,26 @@
 
 #include <Foundation/Foundation.hpp>
 
+#include "adjoint/AxiStressAdjoint.hpp"
 #include "adjoint/DissipationAdjoint.hpp"
 #include "adjoint/ThermalObjectiveAdjoint.hpp"
 #include "adjoint/ThermoElasticAdjoint.hpp"
 #include "adjoint/TripleAdjoint.hpp"
+#include "core/Grid2DAxi.hpp"
 #include "core/Grid3D.hpp"
 #include "fem/H8Element.hpp"
 #include "filter/Helmholtz3D.hpp"
 #include "gpu/CGSolver3D.hpp"
 #include "io/BCResolver.hpp"
 #include "io/MarchingCubes.hpp"
+#include "io/PngWriter.hpp"
 #include "io/ProblemSpec.hpp"
 #include "io/STLExporter.hpp"
 #include "io/VTKExporter.hpp"
 #include "topopt/MMAOptimizer.hpp"
 #include "topopt/SIMP3D.hpp"
 #include "topopt/StressModel.hpp"
+#include "topopt/StressModelAxi.hpp"
 
 using namespace topopt;
 using namespace topopt::gpu;
@@ -596,6 +600,403 @@ int runFluidThermal(const ProblemSpec& s) {
     return 0;
 }
 
+// ===========================================================================
+// Axisymmetric structural branch (CPU double, AxiStressAdjoint): dim=="axi",
+// physics=["elastic"]. Mass minimisation under a von Mises p-norm stress
+// constraint on a body-fitted (r,z) mesh — the nozzle_profiled demonstrator
+// driven from JSON. Loop logic reused VERBATIM from src/apps/nozzle_profiled.cpp
+// (only the parameters come from the spec). Density convention rho=1 material.
+//
+// Schema conventions (documented choices):
+//  - grid[0]=nr, grid[1]=nz, grid[2] ignored; H = size_mm[1].
+//  - geometry "nozzle": bore r_in(z) = r_throat + K (z-H/2)^2 from domain.nozzle
+//    {r_throat, K, wall}; band r_in..r_in+wall. size_mm[0]/[2] ignored.
+//  - geometry "box": rectangular annulus a=size_mm[0], b=size_mm[2] (a>0: the
+//    axis r=0 is never meshed).
+//  - bc.fixed face "z-"/"z+" dof "z": plane-strain u_z=0 on that end row.
+//  - bc.pressure face "inner" (alias "r-"): profiled bore pressure, Gaussian
+//    bump peaked at the throat (nozzle_profiled profile: bump=3, sig=0.18 H);
+//    value = PEAK pressure at the throat, i.e. p0 = value/(1+bump).
+//  - constraints[type=vonmises]: max_rel (relative to the SOLID design's
+//    sigma_PN, demonstrator convention) takes precedence over absolute max.
+//  - filter.radius_mm is converted to cells with the axial cell size hz
+//    (uniform even on the mapped grid): rmin = radius_mm / hz.
+// ===========================================================================
+
+// 2D density filter (linear hat, radius rmin cells) — nozzle_profiled verbatim.
+struct DensityFilterAxi {
+    const Grid2DAxi& g;
+    double rmin;
+    std::vector<std::vector<std::pair<int, double>>> wts;
+
+    DensityFilterAxi(const Grid2DAxi& grid, double r) : g(grid), rmin(r) {
+        const int nr = g.nr(), nz = g.nz();
+        wts.resize(static_cast<size_t>(nr * nz));
+        const int R = static_cast<int>(std::ceil(rmin));
+        for (int ej = 0; ej < nz; ++ej)
+            for (int ei = 0; ei < nr; ++ei) {
+                const int e = g.elemId(ei, ej);
+                double wsum = 0.0;
+                for (int dj = -R; dj <= R; ++dj)
+                    for (int di = -R; di <= R; ++di) {
+                        const int ni = ei + di, nj = ej + dj;
+                        if (ni < 0 || ni >= nr || nj < 0 || nj >= nz) continue;
+                        const double dist = std::sqrt(double(di * di + dj * dj));
+                        const double w = rmin - dist;
+                        if (w <= 0.0) continue;
+                        wts[static_cast<size_t>(e)].push_back({g.elemId(ni, nj), w});
+                        wsum += w;
+                    }
+                for (auto& pr : wts[static_cast<size_t>(e)]) pr.second /= wsum;
+            }
+    }
+    Vec apply(const Vec& x) const {
+        Vec y = Vec::Zero(x.size());
+        for (size_t e = 0; e < wts.size(); ++e)
+            for (const auto& pr : wts[e])
+                y(static_cast<Eigen::Index>(e)) += pr.second * x(pr.first);
+        return y;
+    }
+    Vec applyT(const Vec& gin) const {
+        Vec out = Vec::Zero(gin.size());
+        for (size_t e = 0; e < wts.size(); ++e)
+            for (const auto& pr : wts[e])
+                out(pr.first) += pr.second * gin(static_cast<Eigen::Index>(e));
+        return out;
+    }
+};
+
+// Per-node radius map r(i,j) = r_in(z_j) + i * band/nr — nozzle_profiled verbatim.
+std::vector<double> nozzleNodeRadii(const Grid2DAxi& g,
+                                    const ProblemSpec::NozzleParams& nz,
+                                    double H) {
+    std::vector<double> rmap(static_cast<size_t>(g.nNodes()));
+    for (int j = 0; j <= g.nz(); ++j) {
+        const double z = g.z(j);
+        const double d = z - 0.5 * H;
+        const double ri = nz.r_throat + nz.K * d * d, ro = ri + nz.wall;
+        for (int i = 0; i <= g.nr(); ++i)
+            rmap[static_cast<size_t>(g.nodeId(i, j))] =
+                ri + i * (ro - ri) / g.nr();
+    }
+    return rmap;
+}
+
+// Revolved (Pappus) element volume weight: r_centroid * planar area (shoelace).
+Vec axiVolumeWeights(const Grid2DAxi& g) {
+    Vec w(g.nElems());
+    for (int ej = 0; ej < g.nz(); ++ej)
+        for (int ei = 0; ei < g.nr(); ++ei) {
+            // CCW corner loop: (ei,ej)->(ei+1,ej)->(ei+1,ej+1)->(ei,ej+1).
+            const double r0 = g.rNode(ei, ej), z0 = g.z(ej);
+            const double r1 = g.rNode(ei + 1, ej), z1 = g.z(ej);
+            const double r2 = g.rNode(ei + 1, ej + 1), z2 = g.z(ej + 1);
+            const double r3 = g.rNode(ei, ej + 1), z3 = g.z(ej + 1);
+            const double area =
+                0.5 * std::fabs(r0 * z1 - r1 * z0 + r1 * z2 - r2 * z1 +
+                                r2 * z3 - r3 * z2 + r3 * z0 - r0 * z3);
+            const double rc = 0.25 * (r0 + r1 + r2 + r3);
+            w(g.elemId(ei, ej)) = rc * area;
+        }
+    return w;
+}
+
+int runAxiStruct(const ProblemSpec& s) {
+    const int nr = s.grid[0], nz = s.grid[1];
+    const double H = s.size_mm[1];
+    const bool isNozzle = (s.geometry == "nozzle");
+    if (!isNozzle && s.geometry != "box") {
+        std::fprintf(stderr, "axi: unsupported geometry '%s' (nozzle | box)\n",
+                     s.geometry.c_str());
+        return 1;
+    }
+    const double a = isNozzle ? s.nozzle.r_throat : s.size_mm[0];
+    const double b = isNozzle ? s.nozzle.r_throat + s.nozzle.wall : s.size_mm[2];
+    if (nr < 1 || nz < 1 || H <= 0.0 || a <= 0.0 || b <= a) {
+        std::fprintf(stderr,
+                     "axi: invalid domain (nr=%d nz=%d H=%g a=%g b=%g; need "
+                     "nr,nz>=1, H>0, 0<a<b)\n", nr, nz, H, a, b);
+        return 1;
+    }
+    if (s.objective != "mass") {
+        std::fprintf(stderr, "axi: objective must be \"mass\" (got '%s')\n",
+                     s.objective.c_str());
+        return 1;
+    }
+
+    // Body-fitted axisymmetric mesh: rectangular index space, mapped radii.
+    Grid2DAxi grid(nr, nz, a, b, H);
+    if (isNozzle) grid.setNodeRadii(nozzleNodeRadii(grid, s.nozzle, H));
+
+    // Wall contour (box: constant band) for the exports.
+    auto rInAt = [&](double z) {
+        if (!isNozzle) return a;
+        const double d = z - 0.5 * H;
+        return s.nozzle.r_throat + s.nozzle.K * d * d;
+    };
+    auto rOutAt = [&](double z) {
+        return isNozzle ? rInAt(z) + s.nozzle.wall : b;
+    };
+
+    // --- BCs: direct resolution (no 2D BCResolver). Supported selectors only.
+    // fixed: face "z-"/"z+" dof "z" -> plane-strain slice u_z=0 (hoop stiffness
+    // makes K SPD, no radial pin needed — validated Lame BC family).
+    std::vector<int> fixed;
+    for (const auto& e : s.fixed) {
+        if (e.dof == "z" && e.face == "z-") {
+            for (int i = 0; i <= nr; ++i)
+                fixed.push_back(2 * grid.nodeId(i, 0) + 1);
+        } else if (e.dof == "z" && e.face == "z+") {
+            for (int i = 0; i <= nr; ++i)
+                fixed.push_back(2 * grid.nodeId(i, nz) + 1);
+        } else {
+            std::fprintf(stderr,
+                         "axi: unsupported fixed selector (face='%s' edge='%s' "
+                         "node='%s' region='%s' dof='%s'); supported: face "
+                         "z-/z+ with dof z\n", e.face.c_str(), e.edge.c_str(),
+                         e.node.c_str(), e.region.c_str(), e.dof.c_str());
+            return 1;
+        }
+    }
+    if (fixed.empty()) {
+        std::fprintf(stderr, "axi: no fixed BC (need bc.fixed face z-/z+ dof z)\n");
+        return 1;
+    }
+
+    // pressure: face "inner"/"r-" -> profiled bore pressure peaked at the
+    // throat (nozzle_profiled profile). value = peak pressure at the throat.
+    double pPeak = 0.0;
+    bool havePressure = false;
+    for (const auto& e : s.pressure) {
+        if (e.face == "inner" || e.face == "r-") {
+            pPeak = e.value;
+            havePressure = true;
+        } else {
+            std::fprintf(stderr,
+                         "axi: unsupported pressure selector (face='%s'); "
+                         "supported: face inner (alias r-)\n", e.face.c_str());
+            return 1;
+        }
+    }
+    if (!havePressure || pPeak <= 0.0) {
+        std::fprintf(stderr,
+                     "axi: need bc.pressure face inner with value > 0 (peak)\n");
+        return 1;
+    }
+    const double bump = 3.0, sig = 0.18 * H, p0 = pPeak / (1.0 + bump);
+    std::vector<double> pRow(static_cast<size_t>(grid.nzn()));
+    for (int j = 0; j <= nz; ++j) {
+        const double t = (grid.z(j) - 0.5 * H) / sig;
+        pRow[static_cast<size_t>(j)] = p0 * (1.0 + bump * std::exp(-0.5 * t * t));
+    }
+    FEM2DAxi femLoad(grid, s.nu);
+    const Vec F = femLoad.pressureLoadInnerProfiled(pRow);
+
+    // --- material + validated adjoint/stress machinery. ---
+    AxiStressAdjoint::Material mat;
+    mat.E0 = s.E0; mat.Emin = s.Emin; mat.p = s.penal; mat.nu = s.nu;
+    AxiStressAdjoint adj(grid, mat, fixed, F);
+    StressModelAxi sm(mat.nu, /*qRelax=*/0.5, /*Pagg=*/8.0);
+    DensityFilterAxi filt(grid, s.filter_radius_mm / grid.hz());
+
+    const int ne = grid.nElems();
+    const Vec w = axiVolumeWeights(grid);
+    const double wtot = w.sum();
+
+    // Stress limit: max_rel is relative to the SOLID design's aggregate
+    // (demonstrator convention, keeps the constraint active); max is absolute.
+    double maxRel = 0.0, maxAbs = 0.0;
+    bool haveVM = false;
+    for (const auto& c : s.constraints)
+        if (c.type == "vonmises") { maxRel = c.max_rel; maxAbs = c.max; haveVM = true; }
+    if (!haveVM) {
+        std::fprintf(stderr, "axi: missing constraints[type=vonmises]\n");
+        return 1;
+    }
+    const Vec rhoSolid = Vec::Ones(ne);
+    const double sigmaSolid = adj.stressPNorm(filt.apply(rhoSolid), sm);
+    const double sigmaLim = (maxRel > 0.0) ? maxRel * sigmaSolid : maxAbs;
+    if (sigmaLim <= 0.0) {
+        std::fprintf(stderr,
+                     "axi: constraints[type=vonmises] needs max_rel > 0 or "
+                     "max > 0\n");
+        return 1;
+    }
+
+    std::printf(
+        "topopt_run '%s' [axi-elastic]: %dx%d (%d elems), geometry=%s, "
+        "obj=mass, vonMises<=%.4f, %d iter\n",
+        s.name.c_str(), nr, nz, ne, s.geometry.c_str(), sigmaLim, s.max_iter);
+    if (isNozzle)
+        std::printf("nozzle: throat r_in=%.2f, ends r_in=%.2f, wall band=%.2f\n",
+                    rInAt(0.5 * H), rInAt(0.0), s.nozzle.wall);
+    std::printf("  BCs: %zu fixed DOF, p_peak=%.4f (p0=%.4f), |F|=%.3e\n",
+                fixed.size(), pPeak, p0, F.norm());
+    std::printf("solid sigma_PN = %.4f  -> sigma_lim = %.4f\n", sigmaSolid,
+                sigmaLim);
+
+    // MMA: 1 design var per element, 1 stress constraint. Mass objective.
+    // move=0.12 (nozzle_profiled): stress-constrained TO is stiff at high beta.
+    MMAOptimizer::Params mp;
+    mp.move = 0.12;
+    MMAOptimizer mma(ne, 1, mp);
+    const Vec xmin = Vec::Constant(ne, 1e-3), xmax = Vec::Ones(ne);
+    Vec rho = Vec::Constant(ne, 0.6);
+    const double eta = s.heaviside_eta;
+
+    double mass = 0.0, gcon = 0.0, sigPN = 0.0;
+    std::printf("%4s %8s %10s %6s %8s %6s\n", "it", "mass", "sigma_PN", "beta",
+                "g", "gray");
+    for (int it = 1; it <= s.max_iter; ++it) {
+        const double beta = betaAt(s, it);
+        const Vec rhoTil = filt.apply(rho);
+        Vec gamma(ne), dHdT(ne);
+        for (int e = 0; e < ne; ++e) {
+            gamma(e) = heaviside(rhoTil(e), beta, eta);
+            dHdT(e) = dHeaviside(rhoTil(e), beta, eta);
+        }
+
+        // Objective: normalised (Pappus-weighted) mass + chain-ruled gradient.
+        mass = w.dot(gamma) / wtot;
+        Vec dMdT(ne);
+        for (int e = 0; e < ne; ++e) dMdT(e) = (w(e) / wtot) * dHdT(e);
+        const Vec df0 = filt.applyT(dMdT);
+
+        // Constraint: g = sigma_PN(gamma)/sigma_lim - 1 <= 0 + chain-ruled grad.
+        const auto ss = adj.stressPNormGrad(gamma, sm);
+        sigPN = ss.J;
+        gcon = sigPN / sigmaLim - 1.0;
+        Vec dGdT(ne);
+        for (int e = 0; e < ne; ++e) dGdT(e) = (ss.grad(e) / sigmaLim) * dHdT(e);
+        const Vec dg1 = filt.applyT(dGdT);
+
+        Vec fvals(1); fvals(0) = gcon;
+        Eigen::MatrixXd dfdx(1, ne); dfdx.row(0) = dg1.transpose();
+
+        rho = mma.step(rho, mass, df0, fvals, dfdx, xmin, xmax);
+
+        if (it == 1 || it % 5 == 0 || it == s.max_iter) {
+            int ngi = 0;
+            for (int e = 0; e < ne; ++e)
+                if (gamma(e) > 0.1 && gamma(e) < 0.9) ++ngi;
+            std::printf("%4d %8.4f %10.4f %6.0f %+8.4f %6.3f\n", it, mass, sigPN,
+                        beta, gcon, double(ngi) / ne);
+        }
+    }
+
+    // Final physical density at the last beta.
+    const double betaF = betaAt(s, s.max_iter);
+    const Vec rhoTil = filt.apply(rho);
+    Vec gamma(ne);
+    for (int e = 0; e < ne; ++e) gamma(e) = heaviside(rhoTil(e), betaF, eta);
+
+    // Grey measure (fraction of intermediate cells) -> quasi-binary check.
+    int ng = 0;
+    for (int e = 0; e < ne; ++e)
+        if (gamma(e) > 0.1 && gamma(e) < 0.9) ++ng;
+    const double gray = double(ng) / ne;
+    std::printf("done: mass=%.4f sigma_PN=%.4f g=%+.4f gray=%.3f\n", mass,
+                sigPN, gcon, gray);
+
+    // Wall-thickening diagnostic: mean filled radial fraction per z-band.
+    if (nz >= 24) {
+        auto filledFrac = [&](int j0, int j1) {
+            double sfill = 0.0;
+            for (int ej = j0; ej < j1; ++ej)
+                for (int ei = 0; ei < nr; ++ei)
+                    sfill += gamma(grid.elemId(ei, ej));
+            return sfill / ((j1 - j0) * nr);
+        };
+        const double fThroat = filledFrac(nz / 2 - 6, nz / 2 + 6);
+        const double fEnds = 0.5 * (filledFrac(0, 12) + filledFrac(nz - 12, nz));
+        std::printf("filled wall fraction: throat=%.3f  ends=%.3f  ratio=%.2f "
+                    "-> %s\n", fThroat, fEnds, fThroat / fEnds,
+                    (fThroat > fEnds * 1.05) ? "THICKER AT THROAT (expected)"
+                                             : "no clear throat reinforcement");
+    }
+
+    std::filesystem::create_directories(s.output_dir);
+    const std::string base = s.output_dir + "/" + s.name;
+
+    // --- Cross-section PNG (canonical orientation): full-diameter view, black
+    // bore/void, white material, grey revolution-axis line at r=0 (outside the
+    // meshed domain: the left/right borders are the OUTER wall, the material
+    // starts at r_in(z) inboard — lesson: left edge of the half-view is the
+    // inner wall r=a, NOT the axis). Top of image = z=H.
+    {
+        const double Rmax = rOutAt(0.0) > rOutAt(0.5 * H) ? rOutAt(0.0)
+                                                          : rOutAt(0.5 * H);
+        const int Wpix = 240, sc = 3, Hpix = nz * sc;
+        const double dx = 2.0 * Rmax / Wpix;
+        std::vector<unsigned char> img(static_cast<size_t>(Wpix) * Hpix, 0);
+        for (int row = 0; row < Hpix; ++row) {
+            const int ej = nz - 1 - row / sc;
+            const double zc = grid.z(ej) + 0.5 * grid.hz();
+            const double ri = rInAt(zc), ro = rOutAt(zc);
+            for (int col = 0; col < Wpix; ++col) {
+                const double x = -Rmax + (col + 0.5) * dx;
+                const double rr = std::fabs(x);
+                unsigned char px = 0;                    // void/outside -> black
+                if (std::fabs(x) < 0.6 * dx) {
+                    px = 110;                            // revolution axis (r=0)
+                } else if (rr >= ri && rr < ro) {
+                    int i = static_cast<int>((rr - ri) / (ro - ri) * nr);
+                    i = std::clamp(i, 0, nr - 1);
+                    const double v =
+                        std::clamp(gamma(grid.elemId(i, ej)), 0.0, 1.0);
+                    px = static_cast<unsigned char>(std::lround(255.0 * v));
+                }
+                img[static_cast<size_t>(row) * Wpix + col] = px;
+            }
+        }
+        PngWriter::writeGray(base + ".png", Wpix, Hpix, img);
+        std::printf("wrote %s.png (%dx%d; black=void/bore, white=material, "
+                    "grey line=axis r=0)\n", base.c_str(), Wpix, Hpix);
+    }
+
+    // --- Revolved 3D density (voxelised) -> VTK + STL as the demonstrator. ---
+    const bool wantVti =
+        std::find(s.formats.begin(), s.formats.end(), "vti") != s.formats.end();
+    const bool wantStl =
+        std::find(s.formats.begin(), s.formats.end(), "stl") != s.formats.end();
+    if (wantVti || wantStl) {
+        const double Rmax = rOutAt(0.0) > rOutAt(0.5 * H) ? rOutAt(0.0)
+                                                          : rOutAt(0.5 * H);
+        const int nxy = 72, nz3 = nz;
+        Grid3D g3(nxy, nxy, nz3);
+        Vec rho3(g3.nElems());
+        const double hxy = 2.0 * Rmax / nxy;
+        for (int kz = 0; kz < nz3; ++kz) {
+            const double zc = grid.z(kz) + 0.5 * grid.hz();
+            const double ri = rInAt(zc), ro = rOutAt(zc);
+            for (int jy = 0; jy < nxy; ++jy)
+                for (int ix = 0; ix < nxy; ++ix) {
+                    const double x = -Rmax + (ix + 0.5) * hxy;
+                    const double y = -Rmax + (jy + 0.5) * hxy;
+                    const double rr = std::sqrt(x * x + y * y);
+                    double v = 0.0;
+                    if (rr >= ri && rr < ro) {
+                        const int i = std::clamp(
+                            int((rr - ri) / (ro - ri) * nr), 0, nr - 1);
+                        v = gamma(grid.elemId(i, kz));
+                    }
+                    rho3(g3.elemId(ix, jy, kz)) = v;
+                }
+        }
+        if (wantVti) {
+            VTKExporter::writeImageData(base + ".vti", g3, {{"density", &rho3}});
+            std::printf("wrote %s.vti (revolved density, %d^2x%d voxels)\n",
+                        base.c_str(), nxy, nz3);
+        }
+        if (wantStl) {
+            STLExporter::writeVoxelSurface(base + ".stl", rho3, g3, s.stl_iso);
+            std::printf("wrote %s.stl (revolved wall, %d^2x%d voxels)\n",
+                        base.c_str(), nxy, nz3);
+        }
+    }
+    return 0;
+}
+
 int runStructural(const ProblemSpec& s) {
     NS::AutoreleasePool* pool = NS::AutoreleasePool::alloc()->init();
     Grid3D grid(s.grid[0], s.grid[1], s.grid[2]);
@@ -695,6 +1096,14 @@ int main(int argc, char** argv) {
                spec.physics.end();
     };
     const bool onlyElastic = spec.physics.size() == 1 && spec.physics[0] == "elastic";
+    // Axisymmetric structural (profiled-nozzle demonstrator from JSON).
+    if (spec.dim == "axi") {
+        if (onlyElastic) return runAxiStruct(spec);
+        std::fprintf(stderr,
+                     "dim=axi supports physics=[\"elastic\"] only (got %s).\n",
+                     spec.physics.empty() ? "none" : spec.physics[0].c_str());
+        return 3;
+    }
     if (spec.dim == "3d" && onlyElastic) return runStructural(spec);
     // v3 fluid-thermal-elastic: full Stokes-Brinkman -> CHT -> thermo-elastic.
     if (spec.dim == "3d" && has("fluid") && has("thermal") && has("elastic"))
@@ -704,7 +1113,8 @@ int main(int argc, char** argv) {
         return runThermoElastic(spec);
     std::fprintf(stderr,
                  "topopt_run supports dim=3d physics=[elastic] (v1), "
-                 "[thermal,elastic] (v2) and [fluid,thermal,elastic] (v3); got "
+                 "[thermal,elastic] (v2), [fluid,thermal,elastic] (v3) and "
+                 "dim=axi physics=[elastic]; got "
                  "dim=%s physics[0]=%s.\n",
                  spec.dim.c_str(), spec.physics.empty() ? "?" : spec.physics[0].c_str());
     return 3;

@@ -18,9 +18,24 @@ struct ProblemSpec {
     int version = 1;
 
     // domain
+    // dim=="axi": grid[0]=nr (radial), grid[1]=nz (axial), grid[2] ignored;
+    // size_mm[1]=H (axial height). geometry=="box": size_mm[0]=a (inner
+    // radius), size_mm[2]=b (outer radius) — the axis r=0 is never meshed.
+    // geometry=="nozzle": the radial band comes from `nozzle` below and
+    // size_mm[0]/size_mm[2] are ignored.
     std::array<int, 3> grid = {1, 1, 1};
     std::array<double, 3> size_mm = {1, 1, 1};
     std::string geometry = "box";
+
+    // domain.nozzle — convergent-divergent bore r_in(z) = r_throat + K (z-H/2)^2,
+    // design band r_in(z) <= r <= r_in(z) + wall (cf. nozzle_profiled demo).
+    // Absent fields keep the demonstrator defaults.
+    struct NozzleParams {
+        double r_throat = 0.6;  // inner radius at the throat (z = H/2)
+        double K = 0.20;        // parabola curvature
+        double wall = 0.70;     // radial thickness of the design band
+    };
+    NozzleParams nozzle;
 
     // material
     double E0 = 1.0, Emin = 1e-4, nu = 0.3, penal = 3.0;
@@ -46,7 +61,10 @@ struct ProblemSpec {
 
     // optimize
     std::string objective = "compliance";
-    struct Constraint { std::string type; double max = 0.0; };
+    // max: absolute bound. max_rel: bound relative to the solid design's value
+    // (e.g. vonmises max_rel=1.6 -> sigma_lim = 1.6 * sigma_PN(rho=1)); when
+    // max_rel > 0 it takes precedence over max.
+    struct Constraint { std::string type; double max = 0.0; double max_rel = 0.0; };
     std::vector<Constraint> constraints;
     std::string optimizer = "mma";
     int max_iter = 60;
@@ -74,6 +92,12 @@ struct ProblemSpec {
             if (d.contains("size_mm"))
                 s.size_mm = d["size_mm"].get<std::array<double, 3>>();
             s.geometry = d.value("geometry", s.geometry);
+            if (d.contains("nozzle")) {
+                const auto& n = d["nozzle"];
+                s.nozzle.r_throat = n.value("r_throat", s.nozzle.r_throat);
+                s.nozzle.K = n.value("K", s.nozzle.K);
+                s.nozzle.wall = n.value("wall", s.nozzle.wall);
+            }
         }
         if (j.contains("material")) {
             const auto& m = j["material"];
@@ -140,7 +164,9 @@ struct ProblemSpec {
             s.penal_continuation = o.value("penal_continuation", s.penal_continuation);
             if (o.contains("constraints"))
                 for (const auto& c : o["constraints"])
-                    s.constraints.push_back({c.value("type", ""), c.value("max", 0.0)});
+                    s.constraints.push_back({c.value("type", ""),
+                                             c.value("max", 0.0),
+                                             c.value("max_rel", 0.0)});
         }
         if (j.contains("output")) {
             const auto& o = j["output"];
