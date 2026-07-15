@@ -1,9 +1,11 @@
 // Run panel (M4): launch build/topopt_run through server/run-server.mjs
-// without leaving the browser — local target always, remote target only when
-// VITE_REMOTE_HOST is set (web/.env.local, gitignored). Live convergence via
-// SSE (iteration counter + last objective), cancel, and one-click loading of
-// the produced .vti/.stl into the Results tab (local AND remote: the artifact
-// is fetched from the executing machine, no folder digging).
+// without leaving the browser — Local and Distant targets, both editable in
+// the UI. The remote host/port persist in localStorage (per-browser personal
+// config, never in the repo); VITE_REMOTE_HOST/PORT (web/.env.local,
+// gitignored) only pre-fill them. Live convergence via SSE (iteration counter
+// + last objective), cancel, and one-click loading of the produced .vti/.stl
+// into the Results tab (local AND remote: the artifact is fetched from the
+// executing machine, no folder digging).
 
 import { checkCompat } from "../spec/compat";
 import { specToJson } from "../spec/serialize";
@@ -106,27 +108,43 @@ export function setupRunPanel(
 
   addTarget("local", "Local", () => "127.0.0.1", () => "8787");
 
-  // Remote target: ONLY when VITE_REMOTE_HOST is configured (web/.env.local,
-  // gitignored — personal config, invisible to other users of the repo).
+  // Remote target: always visible, host/port editable in the UI and persisted
+  // in localStorage (personal per-browser config, never in the repo).
+  // VITE_REMOTE_HOST/PORT (web/.env.local, gitignored) only pre-fill them.
   const envHost = (import.meta.env.VITE_REMOTE_HOST as string | undefined) ?? "";
   const envPort = (import.meta.env.VITE_REMOTE_PORT as string | undefined) ?? "8787";
-  if (envHost !== "") {
+  const LS_HOST = "topopt.remoteHost";
+  const LS_PORT = "topopt.remotePort";
+  {
     const wrap = el("span", "run-remote-fields");
     const hostIn = el("input", "run-host");
-    hostIn.value = envHost;
-    hostIn.title = "hôte distant (VITE_REMOTE_HOST)";
+    hostIn.value = localStorage.getItem(LS_HOST) ?? envHost;
+    hostIn.placeholder = "ip du serveur distant";
+    hostIn.title = "hôte distant (ex. IP Tailscale) — mémorisé dans ce navigateur";
     const portIn = el("input", "run-port");
-    portIn.value = envPort;
-    portIn.title = "port distant (VITE_REMOTE_PORT)";
+    portIn.value = localStorage.getItem(LS_PORT) ?? envPort;
+    portIn.title = "port distant — mémorisé dans ce navigateur";
     wrap.append(hostIn, portIn);
     addTarget("remote", "Distant", () => hostIn.value.trim(), () => portIn.value.trim(), wrap);
-    hostIn.addEventListener("change", () => void checkHealth(targets[1]!));
-    portIn.addEventListener("change", () => void checkHealth(targets[1]!));
+    const remote = targets[targets.length - 1]!;
+    hostIn.addEventListener("change", () => {
+      localStorage.setItem(LS_HOST, hostIn.value.trim());
+      void checkHealth(remote);
+    });
+    portIn.addEventListener("change", () => {
+      localStorage.setItem(LS_PORT, portIn.value.trim());
+      void checkHealth(remote);
+    });
   }
 
   const baseUrl = (t: Target): string => `http://${t.host()}:${t.port() || "8787"}`;
 
   const checkHealth = async (t: Target): Promise<void> => {
+    if (t.host() === "") {
+      t.dot.className = "health-dot";
+      t.dot.title = "renseigner l'IP du serveur distant";
+      return;
+    }
     t.dot.className = "health-dot";
     t.dot.title = "vérification…";
     try {
@@ -243,6 +261,10 @@ export function setupRunPanel(
   runBtn.addEventListener("click", () => {
     if (running || checkCompat(store.spec).length > 0) return;
     const t = targets[active]!;
+    if (t.host() === "") {
+      showStatus("error", "cible Distant : renseigner l'IP du serveur (champ à côté de « Distant »)");
+      return;
+    }
     const base = baseUrl(t);
     const maxIter = store.spec.max_iter;
     const body = { ...specToJson(store.spec), outputDir: dirIn.value.trim() || "output" };
@@ -273,7 +295,15 @@ export function setupRunPanel(
       .catch((err: unknown) => {
         finishRun();
         progress.style.display = "none";
-        showStatus("error", `run refusé: ${err instanceof Error ? err.message : String(err)}`);
+        // Fetch network failures ("Load failed"/"failed to fetch") mean the
+        // run server is not reachable — say so, with the fix.
+        const netFail = err instanceof TypeError;
+        showStatus(
+          "error",
+          netFail
+            ? `serveur injoignable sur ${base} — lancer sur la machine ${t.id === "remote" ? "distante : node server/run-server.mjs --host 0.0.0.0" : "locale : node server/run-server.mjs"}`
+            : `run refusé: ${err instanceof Error ? err.message : String(err)}`,
+        );
         void checkHealth(t);
       });
   });

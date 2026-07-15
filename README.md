@@ -114,9 +114,10 @@ node server/run-server.mjs     # the run server (npm run server from web/ also w
   artifacts — `git status` stays clean.
 - **Remote runs**: on a remote machine that cloned + built this repo (e.g. a
   Mac Studio over Tailscale), start `node server/run-server.mjs --host
-  0.0.0.0`; locally, copy `web/.env.example` to `web/.env.local` (gitignored)
-  and set `VITE_REMOTE_HOST` — the Run panel gains a "Distant" target with its
-  own health check, and remote artifacts stream straight into the viewer.
+  0.0.0.0`; locally, pick the "Distant" target in the Run panel and type the
+  remote IP/port there (persisted in the browser, own health check) — remote
+  artifacts stream straight into the viewer. Optional: `VITE_REMOTE_HOST` in
+  `web/.env.local` (gitignored) pre-fills the field.
 
 Acceptance is anchored to the solver: the Studio-exported MBB spec reproduces
 C=18.5216 exactly. Spec and long-term vision (coupled interface constraints,

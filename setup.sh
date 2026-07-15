@@ -85,8 +85,8 @@ cat <<'EOF'
   Run server (local)  node server/run-server.mjs     the Studio "Run" panel talks to it
   Remote runs         on the remote machine (same repo, after ./setup.sh):
                         node server/run-server.mjs --host 0.0.0.0
-                      on this machine: cp web/.env.example web/.env.local,
-                      set VITE_REMOTE_HOST=<remote ip>, restart npm run dev
+                      on this machine: pick "Distant" in the Studio Run panel
+                      and type the remote IP there (saved in the browser)
   Direct CLI          ./build/topopt_run examples/mbb3d.topopt.json
                       -> output/mbb3d/mbb3d.vti (open in ParaView or the Studio)
 EOF
