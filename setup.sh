@@ -39,21 +39,47 @@ NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 command -v npm >/dev/null 2>&1 || fail "npm not found — comes with Node.js (brew install node, or nodejs.org)"
 echo "node $(node --version) + npm $(npm --version): ok"
 
-# --- 2. solver -------------------------------------------------------------------
-step "building the solver (make -j: binaries + shaders.metallib)"
-make -j
-
-if [[ "$RUN_TESTS" -eq 1 ]]; then
-  step "running the CPU validation suite (make test_cpu)"
-  make test_cpu
-fi
-
-# --- 3. Studio (web UI) ------------------------------------------------------------
+# --- 2. Studio (web UI) — first, so a solver failure never blocks the UI ---------
 step "installing TopOpt Studio dependencies (web/)"
 (cd web && npm install)
 
-# --- 4. recap ------------------------------------------------------------------------
+# --- 3. Metal toolchain preflight --------------------------------------------------
+# Recent CLT/Xcode ship the `metal` compiler as a separate downloadable
+# component; without it the shader build fails with "missing Metal Toolchain".
+SOLVER_OK=1
+if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
+  step "Metal toolchain missing — attempting download (xcodebuild -downloadComponent MetalToolchain)"
+  if xcodebuild -downloadComponent MetalToolchain; then
+    xcrun -sdk macosx metal --version >/dev/null 2>&1 || SOLVER_OK=0
+  else
+    SOLVER_OK=0
+  fi
+  if [[ "$SOLVER_OK" -eq 0 ]]; then
+    warn "could not install the Metal Toolchain (full Xcode may be required)."
+    warn "solver build SKIPPED — the Studio still works fully for authoring,"
+    warn "import/export, viewing results, and REMOTE runs (Run panel -> Distant)."
+    warn "to fix later: install Xcode, run 'xcodebuild -downloadComponent MetalToolchain',"
+    warn "then re-run ./setup.sh"
+  fi
+fi
+
+# --- 4. solver -------------------------------------------------------------------
+if [[ "$SOLVER_OK" -eq 1 ]]; then
+  step "building the solver (make -j: binaries + shaders.metallib)"
+  make -j
+
+  if [[ "$RUN_TESTS" -eq 1 ]]; then
+    step "running the CPU validation suite (make test_cpu)"
+    make test_cpu
+  fi
+fi
+
+# --- 5. recap ------------------------------------------------------------------------
 step "done — how to use"
+if [[ "$SOLVER_OK" -eq 0 ]]; then
+  warn "solver NOT built on this machine (no Metal Toolchain) — local runs and"
+  warn "the direct CLI below will not work; remote runs and the Studio will."
+fi
 cat <<'EOF'
   Studio (web UI)     cd web && npm run dev          then open http://localhost:5173
   Run server (local)  node server/run-server.mjs     the Studio "Run" panel talks to it
