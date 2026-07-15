@@ -1,7 +1,11 @@
 # Cahier des charges — Modeleur web de contraintes 3D (TopOpt Studio)
 
-*Draft v0.1 — à itérer. L'outil web est un **producteur/consommateur du contrat
+*Draft v0.2 — à itérer. L'outil web est un **producteur/consommateur du contrat
 `.topopt.json`** (cf. `INPUT_LANGUAGE.md`) : il n'embarque aucune physique.*
+
+**Priorité immédiate (validée)** : une interface donnant assez de contrôle pour
+**utiliser l'algorithme et vérifier ses résultats** (MVP M1–M3). La vision long
+terme (§7) guide l'architecture mais ne conditionne pas le MVP.
 
 ---
 
@@ -111,7 +115,34 @@ Chaque jalon = démo enregistrable. M1–M3 ≈ MVP présentable.
 - **Sur-ingénierie UI** : pas de framework tant que lil-gui suffit (décision §3 à
   confirmer au premier prototype).
 
-## 7. Arborescence prévue
+## 7. Vision long terme — interfaces couplées (conception par flux)
+
+*Le cas d'usage cible (exemple fondateur) : concevoir une tuyère **entre deux
+disques d'interface**. Le disque amont porte le flux mesuré en sortie de chambre
+de combustion (profils T(r), u(r) connus) ; le disque aval impose le flux voulu
+(vitesse axiale cible, profil plat, composante radiale nulle, température max…).
+L'algorithme optimise la matière entre les deux — y compris la **distance H**
+entre les disques, variable dans un domaine borné. Puis : passe de robustesse
+(renforcer les zones sensibles au prix de masse), matériaux par zone 3D, export
+et test.*
+
+Traduction en concepts d'outil, avec l'état réel du solveur (honnêteté oblige) :
+
+| Concept | Objet UI | Côté solveur | Statut |
+|---|---|---|---|
+| **Disque d'interface** : BC riche portée par une surface (profils T(r), u(r), direction) | objet 3D positionnable portant des champs paramétrés (uniforme, parabolique, tabulé/CSV) | Dirichlet **inhomogène** par profil sur une face/région | ❌ nouveaux : le solveur actuel condense en Dirichlet homogène (T=0, u=0) + drive volumique ; extension du contrat (`bc.flow[].profile`, `bc.thermal[].profile`) + adaptation des adjoints (les gates existants restent valides, le RHS change) |
+| **Contrainte de sortie de flux** (vitesse cible, radiale nulle, profil plat) | panneau « objectif de flux » sur le disque aval | nouvelles fonctionnelles J (écart au profil cible sur une section) + leurs adjoints | ❌ **nouveaux gates DF** (machinerie cascade réutilisable, semis différent — même schéma que le gate vm-triple) |
+| **Géométrie variable (H ∈ [H_min, H_max])** | poignée/slider sur l'objet, domaine borné | variable de **forme** couplée à la TO : gradient par adjoint de forme ou boucle externe (DF sur H, peu coûteux pour 1-3 paramètres) | ❌ nouveau ; la boucle externe DF est le chemin pragmatique |
+| **Robustesse** (masse ↑ pour renforcer les zones sensibles) | slider post-résultat « robustesse » | re-run avec σ_lim abaissé (`max_rel` ↓) ou érosion/dilatation (projection Heaviside décalée η±Δ — approche robuste classique) | 🟡 assemblage : `max_rel` existe ; l'érosion/dilatation est un ajout modéré |
+| **Matériaux par zone** | volumes 3D peints/placés (boîtes, cylindres) | champ matériau par élément (E0, k, α_th par zone) | 🟡 extension du contrat (`material.zones[]`) + interpolation par zone ; pas de nouveau gate (les adjoints sont déjà par élément) |
+| **Boucle résultat → test** | viewer + export STL + rapport | déjà couvert (VTI/STL/marching cubes) | ✅ |
+
+Principe directeur : **chaque concept entre dans le contrat `.topopt.json` d'abord**
+(schéma versionné), l'UI et le solveur suivent. Tout nouveau gradient passe un
+gate DF avant usage (règle inchangée). L'exemple fondateur (tuyère entre deux
+disques) devient le démonstrateur de la V3+.
+
+## 8. Arborescence prévue
 
 ```
 web/
