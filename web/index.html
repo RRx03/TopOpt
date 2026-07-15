@@ -10,13 +10,21 @@
       <aside id="sidebar">
         <header id="brand">
           <h1>TopOpt Studio</h1>
-          <span class="sub">M2 — round-trip · presets · validation</span>
+          <span class="sub">M3 — editor · results viewer (vtk.js)</span>
+          <nav id="mode-tabs">
+            <button class="mode-tab active" data-mode="editor">editor</button>
+            <button class="mode-tab" data-mode="results">results</button>
+          </nav>
         </header>
-        <section id="load-panel"></section>
-        <section id="bc-panel"></section>
-        <section id="export-panel"></section>
+        <div id="editor-side">
+          <section id="load-panel"></section>
+          <section id="bc-panel"></section>
+          <section id="export-panel"></section>
+        </div>
+        <div id="results-side" hidden></div>
       </aside>
       <main id="viewport"></main>
+      <main id="results-viewport" hidden></main>
       <div id="gui-panel"></div>
     </div>
     <script type="module" src="/src/main.ts"></script>

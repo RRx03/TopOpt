@@ -88,9 +88,31 @@ displacement) for ParaView, and marching-cubes `.stl` geometry.
   multiphysics), phase reports, and the orchestration specs used to develop and
   gate each feature.
 
+## TopOpt Studio (web UI)
+
+`web/` hosts **TopOpt Studio** — a static web app (three.js + vtk.js, no
+backend) closing the author→solve→inspect loop:
+
+```sh
+cd web && npm install && npm run dev
+```
+
+- **Author**: 3D box editor, click faces/edges to place supports and loads,
+  parameter panels, live JSON preview, export `.topopt.json`.
+- **Import**: lossless round-trip of any spec (advanced fluid/thermal BCs shown
+  read-only), embedded gallery of the repo examples, compatibility validation.
+- **Results**: load the solver's `.vti`/`.stl` — iso-surfaces, orthogonal
+  slices, colormaps (e.g. coolant-channel iso + temperature slice).
+
+Acceptance is anchored to the solver: the Studio-exported MBB spec reproduces
+C=18.5216 exactly. Spec and long-term vision (coupled interface constraints,
+variable geometry, robustness, per-zone materials):
+[`docs/WEB_MODELER_SPEC.md`](docs/WEB_MODELER_SPEC.md).
+
 ## Roadmap
 
-- Web-based 3D constraint modeler (three.js) authoring `.topopt.json`, with a
-  vtk.js results viewer — spec in progress.
+- Studio V2: in-UI editing of thermal/flow BCs, axisymmetric profile editor.
+- Coupled interface constraints (inlet/outlet flow disks, variable spacing) —
+  new FD-gated flow-target functionals; see spec §7.
 - GPU port of the multiphysics adjoints (currently CPU double precision by
   design: correctness first).

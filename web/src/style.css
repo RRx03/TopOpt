@@ -51,12 +51,18 @@ body {
   font-size: 11px;
 }
 
-#viewport {
+#viewport,
+#results-viewport {
+  grid-column: 2;
+  grid-row: 1;
   position: relative;
   overflow: hidden;
 }
 #viewport canvas {
   display: block;
+}
+[hidden] {
+  display: none !important;
 }
 
 #gui-panel {
@@ -309,4 +315,90 @@ select {
   max-height: 340px;
   margin: 8px 0 0;
   user-select: text;
+}
+
+/* --- M3: mode tabs + results viewer ---------------------------------------- */
+#mode-tabs {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.mode-tab {
+  flex: 1;
+  background: var(--panel-2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 0;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.mode-tab:hover {
+  color: var(--text);
+}
+.mode-tab.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#results-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.result-info {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 8px 0;
+}
+
+.axis-tag {
+  color: var(--accent);
+  font-size: 11px;
+  width: 14px;
+  text-align: center;
+}
+.wide-range {
+  flex: 1;
+  min-width: 90px;
+  accent-color: var(--accent);
+}
+.range-val {
+  color: var(--muted);
+  font-size: 11px;
+  min-width: 44px;
+  text-align: right;
+}
+
+.scalar-bar {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 11px;
+}
+.scalar-bar canvas {
+  border-radius: 2px;
+  display: block;
+}
+.scalar-bar-field {
+  color: var(--accent);
+}
+.scalar-bar-val {
+  color: var(--muted);
 }
