@@ -6,8 +6,10 @@ build/
 *.metallib
 *.dSYM
 
-# Generated optimization outputs
-output/
+# Generated optimization outputs (output/* not output/ so the .gitkeep
+# negation can re-include the file and a fresh clone gets the empty dir)
+output/*
+!output/.gitkeep
 
 # macOS / editors
 .DS_Store

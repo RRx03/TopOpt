@@ -90,11 +90,14 @@ displacement) for ParaView, and marching-cubes `.stl` geometry.
 
 ## TopOpt Studio (web UI)
 
-`web/` hosts **TopOpt Studio** — a static web app (three.js + vtk.js, no
-backend) closing the author→solve→inspect loop:
+`web/` hosts **TopOpt Studio** — a web app (three.js + vtk.js) closing the
+author→solve→inspect loop without leaving the browser. Bootstrap a fresh
+clone with:
 
 ```sh
-cd web && npm install && npm run dev
+./setup.sh                     # checks toolchain, make -j, npm install (--test: full suite)
+cd web && npm run dev          # the Studio, http://localhost:5173
+node server/run-server.mjs     # the run server (npm run server from web/ also works)
 ```
 
 - **Author**: 3D box editor, click faces/edges to place supports and loads,
@@ -103,6 +106,17 @@ cd web && npm install && npm run dev
   read-only), embedded gallery of the repo examples, compatibility validation.
 - **Results**: load the solver's `.vti`/`.stl` — iso-surfaces, orthogonal
   slices, colormaps (e.g. coolant-channel iso + temperature slice).
+- **Run**: launch `build/topopt_run` from the UI through the zero-dependency
+  Node server (`server/run-server.mjs`, one run at a time). Live convergence
+  log (SSE) with an it/max_iter counter, cancel, then one-click loading of the
+  produced `.vti`/`.stl` into Results. Every run gets its own timestamped
+  folder under `output/` (gitignored) with the exact spec archived beside the
+  artifacts — `git status` stays clean.
+- **Remote runs**: on a remote machine that cloned + built this repo (e.g. a
+  Mac Studio over Tailscale), start `node server/run-server.mjs --host
+  0.0.0.0`; locally, copy `web/.env.example` to `web/.env.local` (gitignored)
+  and set `VITE_REMOTE_HOST` — the Run panel gains a "Distant" target with its
+  own health check, and remote artifacts stream straight into the viewer.
 
 Acceptance is anchored to the solver: the Studio-exported MBB spec reproduces
 C=18.5216 exactly. Spec and long-term vision (coupled interface constraints,

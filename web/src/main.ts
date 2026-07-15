@@ -6,6 +6,7 @@ import { setupPanels } from "./panels/panels";
 import { setupBCPanel } from "./panels/bcPanel";
 import { setupExportPanel } from "./panels/exportPanel";
 import { setupLoadPanel } from "./panels/loadPanel";
+import { setupRunPanel } from "./panels/runPanel";
 import type { ResultsViewer } from "./viewer/viewer";
 
 const store = new Store(mbb3dPreset());
@@ -15,6 +16,13 @@ setupPanels(document.getElementById("gui-panel")!, store);
 setupLoadPanel(document.getElementById("load-panel")!, store);
 setupBCPanel(document.getElementById("bc-panel")!, store);
 setupExportPanel(document.getElementById("export-panel")!, store);
+// M4: run the solver from the UI; artifacts open straight in Results.
+setupRunPanel(document.getElementById("run-panel")!, store, {
+  openResult: async (file) => {
+    setMode("results");
+    await (await ensureViewer()).loadFile(file);
+  },
+});
 
 // --- M3: editor / results mode switch ----------------------------------------
 // The editor (three.js scene + Store) stays alive while hidden — switching back

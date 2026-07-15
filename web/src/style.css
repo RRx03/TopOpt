@@ -402,3 +402,105 @@ select {
 .scalar-bar-val {
   color: var(--muted);
 }
+
+/* --- M4: run panel ------------------------------------------------------- */
+.run-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.run-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.run-target-label {
+  min-width: 52px;
+}
+.health-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.health-dot.health-up {
+  background: #58d68d;
+}
+.health-dot.health-warn {
+  background: var(--load);
+}
+.health-dot.health-down {
+  background: #ff5c5c;
+}
+.run-remote-fields {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.run-host,
+.run-port,
+.run-dir {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 6px;
+  min-width: 0;
+}
+.run-host {
+  flex: 1;
+}
+.run-port {
+  width: 56px;
+}
+.run-dir {
+  flex: 1;
+}
+.run-dir-label {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.run-progress {
+  color: var(--accent);
+  font-size: 12px;
+  margin: 8px 0 4px;
+}
+.run-log {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 10px;
+  line-height: 1.45;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre;
+  margin: 8px 0;
+}
+.artifact-list {
+  margin-top: 4px;
+}
+.artifact-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.artifact-btn {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.artifact-size {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}

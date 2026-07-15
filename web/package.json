@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "server": "node ../server/run-server.mjs",
+    "test:integration": "node ../server/tests/integration.mjs"
   },
   "dependencies": {
     "@kitware/vtk.js": "^36.4.1",
