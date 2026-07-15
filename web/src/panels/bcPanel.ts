@@ -1,7 +1,41 @@
 // Boundary-conditions panel (vanilla DOM): current selection, add support /
-// add load forms, list of BCs with delete buttons.
+// add load forms, list of BCs with delete buttons. M2: non-elastic entries
+// (thermal / flow / pressure / drive) are preserved on import and listed in a
+// read-only section — their edition is the V2 of the 3D editor.
 
+import type { BCEntry, ProblemSpec } from "../spec/ProblemSpec";
 import { describeBC, type BCKind, type Store } from "../state";
+
+function where(e: BCEntry): string {
+  if (e.face) return `face ${e.face}`;
+  if (e.edge) return `edge ${e.edge}`;
+  if (e.node) return `node ${e.node}`;
+  if (e.region) return `region ${e.region}`;
+  return "(no selector)";
+}
+
+type AdvKind = "thermal" | "flow" | "pressure";
+
+function describeAdvanced(kind: AdvKind, e: BCEntry): string {
+  if (kind === "thermal") return `thermal · ${where(e)} · ${e.dof || "?"} = ${e.value}`;
+  if (kind === "flow") return `flow · ${where(e)} · ${e.dof || "?"}`;
+  return `pressure · ${where(e)} · p = ${e.value}`;
+}
+
+// Read-only rows: every advanced BC of the spec + the Stokes drive.
+function advancedRows(s: ProblemSpec): string[] {
+  const rows: string[] = [];
+  const kinds: readonly AdvKind[] = ["thermal", "flow", "pressure"];
+  for (const kind of kinds)
+    for (const e of s[kind]) {
+      if (kind === "flow" && !e.face && !e.edge && !e.node && !e.region && !e.dof)
+        continue; // parse residue of a drive-only entry, shown via body_force
+      rows.push(describeAdvanced(kind, e));
+    }
+  if (s.body_force.some((v) => v !== 0))
+    rows.push(`flow drive = [${s.body_force.join(", ")}]`);
+  return rows;
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -56,13 +90,21 @@ export function setupBCPanel(container: HTMLElement, store: Store): void {
 
   const list = el("div", "bc-list");
 
+  // V2 banner + read-only advanced BCs (shown only when the spec has them).
+  const banner = el("div", "banner-v2");
+  const advTitle = el("h3", undefined, "BCs avancées (lecture seule)");
+  const advList = el("div", "bc-list");
+
   container.appendChild(el("h2", undefined, "Boundary conditions"));
+  container.appendChild(banner);
   container.appendChild(selInfo);
   container.appendChild(supRow);
   container.appendChild(loadRow);
   container.appendChild(hint);
   container.appendChild(el("h3", undefined, "Applied"));
   container.appendChild(list);
+  container.appendChild(advTitle);
+  container.appendChild(advList);
 
   supBtn.addEventListener("click", () => {
     if (store.selection)
@@ -102,6 +144,28 @@ export function setupBCPanel(container: HTMLElement, store: Store): void {
         list.appendChild(row);
       });
     if (count === 0) list.appendChild(el("div", "empty", "none yet"));
+
+    // banner: non-elastic physics / axi dim are read-only in M2 (editor V2)
+    const s = store.spec;
+    const notes: string[] = [];
+    if (s.physics.includes("fluid") || s.physics.includes("thermal"))
+      notes.push("physique fluide-thermique : édition V2");
+    if (s.dim === "axi") notes.push("dim axi : édition V2");
+    banner.textContent = notes.join(" · ");
+    banner.style.display = notes.length ? "" : "none";
+
+    // read-only advanced entries (preserved verbatim on export)
+    const rows = advancedRows(s);
+    advList.textContent = "";
+    for (const text of rows) {
+      const row = el("div", "bc-item bc-item-ro");
+      row.appendChild(el("span", "bc-dot bc-dot-adv"));
+      row.appendChild(el("span", "bc-desc", text));
+      row.appendChild(el("span", "ro-tag", "ro"));
+      advList.appendChild(row);
+    }
+    advTitle.style.display = rows.length ? "" : "none";
+    advList.style.display = rows.length ? "" : "none";
   };
 
   store.on(render);

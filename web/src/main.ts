@@ -5,10 +5,12 @@ import { Editor } from "./editor/scene";
 import { setupPanels } from "./panels/panels";
 import { setupBCPanel } from "./panels/bcPanel";
 import { setupExportPanel } from "./panels/exportPanel";
+import { setupLoadPanel } from "./panels/loadPanel";
 
 const store = new Store(mbb3dPreset());
 
 new Editor(document.getElementById("viewport")!, store);
 setupPanels(document.getElementById("gui-panel")!, store);
+setupLoadPanel(document.getElementById("load-panel")!, store);
 setupBCPanel(document.getElementById("bc-panel")!, store);
 setupExportPanel(document.getElementById("export-panel")!, store);

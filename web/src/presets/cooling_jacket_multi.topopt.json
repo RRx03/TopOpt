@@ -1,0 +1,44 @@
+{
+  "meta":   { "name": "cooling_jacket_multi", "version": 1, "dim": "3d" },
+  "domain": { "grid": [12, 12, 20], "size_mm": [12, 12, 20], "geometry": "box" },
+  "material": {
+    "E0": 1.0, "Emin": 1e-4, "nu": 0.3, "penal": 3.0,
+    "k_solid": 1.0, "k_fluid": 0.3, "alpha_th": 1.5e-2, "Tref": 0.0,
+    "mu": 1.0, "brinkman_max": 500.0, "brinkman_q": 0.1
+  },
+  "physics": ["fluid", "thermal", "elastic"],
+  "bc": {
+    "flow": [
+      { "face": "x-", "dof": "wall" },
+      { "face": "x+", "dof": "wall" },
+      { "face": "y-", "dof": "slip" },
+      { "face": "y+", "dof": "slip" },
+      { "node": "corner:x-,y-,z-", "dof": "pressure" },
+      { "drive": [0.0, 0.0, 30.0] }
+    ],
+    "thermal": [
+      { "face": "z-", "dof": "T", "value": 0.0 },
+      { "face": "z+", "dof": "T", "value": 0.0 },
+      { "region": "z:8:12", "dof": "Q", "value": 3000.0 }
+    ],
+    "fixed": [
+      { "face": "z-", "dof": "all" }
+    ],
+    "loads": [
+      { "face": "z+", "dof": "z", "value": 1.69 }
+    ]
+  },
+  "filter":  { "radius_mm": 1.5, "heaviside": { "beta": [1, 2, 4, 8, 16], "eta": 0.5 } },
+  "optimize": {
+    "objective": "compliance",
+    "_comment": "Bounds calibrated against the free (volume-only) design: J_T free = 17.54, Phi free = 5.81e4. tmax=13.0 sits ~26% below the free wall temperature so the constraint is ACTIVE at convergence (forces more coolant channels around the z:8:12 heat source). dissipation=4.0e4 caps the pumping power ~31% below the free value and ends ACTIVE as well.",
+    "constraints": [
+      { "type": "volume",      "max": 0.40 },
+      { "type": "tmax",        "max": 13.0 },
+      { "type": "dissipation", "max": 4.0e4 }
+    ],
+    "optimizer": "mma",
+    "max_iter": 60
+  },
+  "output": { "dir": "output/cooling_jacket_multi", "formats": ["vti"], "fields": ["density"] }
+}

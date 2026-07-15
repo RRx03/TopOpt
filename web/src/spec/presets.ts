@@ -1,7 +1,19 @@
 // Presets = full ProblemSpec states (defaults come from defaultSpec, the
 // exact mirror of ProblemSpec.hpp).
+//
+// The 6 repo examples are embedded at build time as static raw-JSON imports
+// (no fetch); web/src/presets/*.topopt.json are verbatim copies of examples/
+// and a test asserts byte-identity with the repo files (source of truth).
 
 import { defaultSpec, emptyBC, type ProblemSpec } from "./ProblemSpec";
+import { specFromString } from "./serialize";
+
+import mbb3dRaw from "../presets/mbb3d.topopt.json?raw";
+import bracketThermoRaw from "../presets/bracket_thermo.topopt.json?raw";
+import coolingJacketRaw from "../presets/cooling_jacket.topopt.json?raw";
+import coolingJacketMultiRaw from "../presets/cooling_jacket_multi.topopt.json?raw";
+import coolingJacketFullRaw from "../presets/cooling_jacket_full.topopt.json?raw";
+import nozzleProfiledRaw from "../presets/nozzle_profiled.topopt.json?raw";
 
 // Blank elastic box with a workable resolution (pure schema defaults except
 // the domain, which defaults to a degenerate 1x1x1 grid in the C++ struct).
@@ -34,7 +46,62 @@ export function mbb3dPreset(): ProblemSpec {
   return s;
 }
 
-export const presets: Record<string, () => ProblemSpec> = {
-  blank: blankPreset,
-  mbb3d: mbb3dPreset,
-};
+// --- gallery: the 6 repo examples --------------------------------------------
+
+export interface ExamplePreset {
+  id: string;
+  file: string; // filename under examples/ (and web/src/presets/)
+  physics: string; // human label, derived from the embedded spec
+  description: string;
+  raw: string; // exact repo file content (embedded at build)
+  make(): ProblemSpec;
+}
+
+function physicsLabel(raw: string): string {
+  const s = specFromString(raw);
+  return `${s.physics.join(" + ")} (${s.dim})`;
+}
+
+function preset(id: string, raw: string, description: string): ExamplePreset {
+  return {
+    id,
+    file: `${id}.topopt.json`,
+    physics: physicsLabel(raw),
+    description,
+    raw,
+    make: () => specFromString(raw),
+  };
+}
+
+export const examplePresets: readonly ExamplePreset[] = [
+  preset(
+    "mbb3d",
+    mbb3dRaw,
+    "MBB beam: compliance min under a 30% volume cap (M1 golden).",
+  ),
+  preset(
+    "bracket_thermo",
+    bracketThermoRaw,
+    "Thermo-elastic bracket: mass min under a von Mises cap, tip heat flux.",
+  ),
+  preset(
+    "cooling_jacket",
+    coolingJacketRaw,
+    "Fluid-cooled jacket: compliance min, volume constraint only.",
+  ),
+  preset(
+    "cooling_jacket_multi",
+    coolingJacketMultiRaw,
+    "Cooling jacket with volume + tmax + dissipation constraints (all active).",
+  ),
+  preset(
+    "cooling_jacket_full",
+    coolingJacketFullRaw,
+    "Cooling jacket with four active constraints, incl. von Mises stress.",
+  ),
+  preset(
+    "nozzle_profiled",
+    nozzleProfiledRaw,
+    "Axisymmetric nozzle wall: mass min, relative von Mises bound (max_rel).",
+  ),
+];

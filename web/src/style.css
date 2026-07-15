@@ -212,6 +212,91 @@ select {
   font-size: 12px;
 }
 
+/* --- M2: import status / compat validation ------------------------------- */
+.import-status {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin: 8px 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.import-title {
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+.import-item {
+  color: var(--text);
+}
+.import-ok {
+  border-color: #3f7a4c;
+  color: #8fd19a;
+}
+.import-warn {
+  border-color: #8a6d1f;
+  color: #e7c96a;
+}
+.import-error {
+  border-color: #8a3232;
+  color: #ef9a9a;
+}
+
+/* --- M2: V2 banner + read-only advanced BCs ------------------------------- */
+.banner-v2 {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+  font-size: 11px;
+  padding: 5px 8px;
+  margin-bottom: 10px;
+}
+.bc-item-ro {
+  opacity: 0.75;
+}
+.bc-dot-adv {
+  background: #b18cff;
+}
+.ro-tag {
+  color: var(--muted);
+  font-size: 10px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+/* --- M2: preset gallery ---------------------------------------------------- */
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.preset-item {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+.preset-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.preset-load {
+  font-size: 12px;
+}
+.preset-phys {
+  color: var(--muted);
+  font-size: 10px;
+}
+.preset-desc {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
 .json-preview {
   background: #0c0f13;
   border: 1px solid var(--border);

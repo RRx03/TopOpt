@@ -1,8 +1,9 @@
 // .topopt.json serialization. Emission policy: groups are always structured
 // like the schema; scalar fields equal to the ProblemSpec defaults may be
 // omitted (the C++ parser fills them back). specFromJson mirrors
-// ProblemSpec::fromJson exactly, so `specFromJson(specToJson(s))` deep-equals
-// `s` and golden comparisons are done on normalized specs.
+// ProblemSpec::fromJson exactly (including the empty flow entry a drive-only
+// object leaves behind), so `specFromJson(specToJson(s))` deep-equals `s` for
+// any parsed/UI-built spec and golden comparisons are done on normalized specs.
 
 import {
   defaultSpec,
@@ -70,11 +71,14 @@ export function specToJson(s: ProblemSpec): Json {
   if (s.loads.length) bc.loads = s.loads.map(bcToJson);
   if (s.pressure.length) bc.pressure = s.pressure.map(bcToJson);
   if (s.thermal.length) bc.thermal = s.thermal.map(bcToJson);
-  if (s.flow.length) {
-    const flow = s.flow.map(bcToJson);
-    if (s.body_force.some((v) => v !== 0) && flow.length > 0)
-      (flow[0] as Json).drive = [...s.body_force];
-    bc.flow = flow;
+  // The Stokes drive is emitted as its own trailing flow entry (the repo
+  // convention); flow entries that serialize to {} (the parse residue of a
+  // drive-only entry) are dropped so import → export is structurally stable.
+  const hasDrive = s.body_force.some((v) => v !== 0);
+  if (s.flow.length || hasDrive) {
+    const flow = s.flow.map(bcToJson).filter((o) => Object.keys(o).length > 0);
+    if (hasDrive) flow.push({ drive: [...s.body_force] });
+    if (flow.length) bc.flow = flow;
   }
   if (Object.keys(bc).length > 0) j.bc = bc;
 

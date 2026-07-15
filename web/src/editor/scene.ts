@@ -95,8 +95,11 @@ export class Editor {
     this.rebuildDomain();
     const sizeKey = JSON.stringify(this.store.spec.size_mm);
     if (sizeKey !== this.lastSize) {
+      const firstBuild = this.lastSize === "";
       this.lastSize = sizeKey;
       this.rebuildHelpers();
+      // Domain size changed (e.g. an import replaced the spec): reframe.
+      if (!firstBuild) this.frameCamera();
     }
   }
 
